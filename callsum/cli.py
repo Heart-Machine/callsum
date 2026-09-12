@@ -182,9 +182,19 @@ def cmd_doctor(args, cfg) -> int:
         except obs_mod.ObsError as exc:
             print(f"[  ] {exc}")
 
+    # Папки создаются прямо здесь: проверка окружения должна оставлять его
+    # готовым к работе, а не сообщать о недостаче того, что программа и так
+    # заводит сама при первой записи.
     for key in ("recordings", "out"):
         p = cfg.path(key)
-        print(f"[{'ok' if p.exists() else '  '}] папка {key}: {p}")
+        existed = p.exists()
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            ok = False
+            print(f"[!!] папку {key} не удалось создать: {exc}")
+            continue
+        print(f"[ok] папка {key}: {p}" + ("" if existed else " (создана)"))
 
     print("\nВсё готово." if ok else "\nЕсть проблемы — см. строки [!!].")
     return 0 if ok else 1

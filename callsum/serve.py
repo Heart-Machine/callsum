@@ -193,6 +193,17 @@ class Engine:
             report["ollama"] = False
             report["model"] = False
             report["ollama_error"] = str(exc)
+
+        # Папки заводим сразу: приложению нужно знать готовые пути, а не
+        # разбираться, чего ещё не хватает.
+        for key in ("recordings", "out"):
+            folder = self.cfg.path(key)
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                report[f"{key}_error"] = str(exc)
+            report[key] = str(folder)
+
         self.emit(report)
 
     def _ensure_transcriber(self) -> Transcriber:

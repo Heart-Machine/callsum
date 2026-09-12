@@ -223,3 +223,17 @@ def test_byte_order_mark_does_not_break_a_command(cfg, monkeypatch):
 
     assert [c["id"] for c in calls] == ["1"]
     assert not any("Не разобрал" in line for line in out)
+
+
+def test_doctor_creates_working_folders(cfg):
+    """Проверка окружения должна оставлять его готовым к работе."""
+    recordings = cfg.path("recordings")
+    out = cfg.path("out")
+    assert not recordings.exists()
+
+    events = run(cfg, {"cmd": "doctor", "id": "1"})
+    report = next(e for e in events if e["event"] == "doctor")
+
+    assert recordings.is_dir() and out.is_dir()
+    assert report["recordings"] == str(recordings)
+    assert report["out"] == str(out)
