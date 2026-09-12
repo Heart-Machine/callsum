@@ -108,6 +108,8 @@ class MainWindow(QMainWindow):
         self.previous_profile: str | None = None
         # Нажатие уже отправлено в OBS, ждём от него подтверждения событием.
         self.record_pending = False
+        # Выход начат: окно больше не прячется в трей, а честно закрывается.
+        self.stopped = False
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setWindowIcon(dot_icon("#c0392b"))
@@ -472,7 +474,15 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def closeEvent(self, event) -> None:  # noqa: N802 — имя метода задано Qt
-        """Крестик прячет окно в трей: запись и обработка не прерываются."""
+        """Крестик прячет окно в трей: запись и обработка не прерываются.
+
+        При выходе Qt закрывает окно сам, и этот же обработчик срабатывал
+        снова — пользователь нажимал «Выход», а получал уведомление о том,
+        что программа свернулась.
+        """
+        if self.stopped:
+            event.accept()
+            return
         event.ignore()
         self.hide()
         self.notify_user(
@@ -486,9 +496,9 @@ class MainWindow(QMainWindow):
         Клиент событий OBS крутит свой поток, и без явного разрыва связи
         процесс не завершается даже после закрытия окна.
         """
-        if getattr(self, "_stopped", False):
+        if self.stopped:
             return
-        self._stopped = True
+        self.stopped = True
         self.obs.close()
         self.thread.quit()
         self.thread.wait(5000)

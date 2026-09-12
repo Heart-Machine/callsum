@@ -27,6 +27,22 @@ class StubObs:
         if self.fail:
             raise RuntimeError("OBS занят")
 
+    def connect(self):
+        """Окно пробует подключиться по таймеру — пусть находит готовое соединение."""
+        self.connected = True
+
+    def subscribe_record_state(self, callback):
+        self.callback = callback
+
+    def status(self):
+        return False, 0.0
+
+    @property
+    def settings(self):
+        from callsum.obs import ObsSettings
+
+        return ObsSettings()
+
     def current_profile(self):
         return "callsum"
 
@@ -116,3 +132,32 @@ def test_window_title_shows_recording_state(window):
 
     window.on_record_state(False, "")
     assert window.windowTitle() == WINDOW_TITLE
+
+
+def test_close_button_hides_to_tray_with_a_notice(window):
+    from PySide6.QtGui import QCloseEvent
+
+    notices = []
+    window.notify_user = lambda title, text, warning=False: notices.append(title)
+
+    event = QCloseEvent()
+    window.closeEvent(event)
+
+    assert event.isAccepted() is False, "крестик не должен закрывать приложение"
+    assert window.isHidden() is True
+    assert notices == ["callsum свернулся в трей"]
+
+
+def test_quit_does_not_announce_minimising(window):
+    """Нажали «Выход» — окно закрывается молча, а не сообщает, что свернулось."""
+    from PySide6.QtGui import QCloseEvent
+
+    notices = []
+    window.notify_user = lambda title, text, warning=False: notices.append(title)
+
+    window.shutdown()
+    event = QCloseEvent()
+    window.closeEvent(event)
+
+    assert event.isAccepted() is True
+    assert notices == []
