@@ -45,6 +45,13 @@ def register(icon: Path | None = None) -> bool:
             winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, APP_DISPLAY_NAME)
             if icon is not None and Path(icon).is_file():
                 winreg.SetValueEx(key, "IconUri", 0, winreg.REG_SZ, str(Path(icon).resolve()))
+            else:
+                # Ссылка на несуществующий файл хуже её отсутствия: Windows
+                # покажет пустое место вместо запасного значка.
+                try:
+                    winreg.DeleteValue(key, "IconUri")
+                except FileNotFoundError:
+                    pass
     except Exception:  # noqa: BLE001 — без регистрации остаётся запасной путь
         return False
     return True

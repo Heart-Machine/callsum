@@ -33,3 +33,21 @@ def test_registration_writes_display_name():
     assert notify.register() is True
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, notify.REGISTRY_KEY) as key:
         assert winreg.QueryValueEx(key, "DisplayName")[0] == notify.APP_DISPLAY_NAME
+
+
+@pytest.mark.skipif(os.name != "nt", reason="регистрация приложения есть только в Windows")
+def test_missing_icon_clears_stale_registration(tmp_path):
+    """Путь к удалённой картинке нужно убирать, а не оставлять висеть в реестре."""
+    import winreg
+
+    icon = tmp_path / "icon.png"
+    icon.write_bytes(b"\x89PNG\r\n\x1a\n")
+    notify.register(icon)
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, notify.REGISTRY_KEY) as key:
+        assert winreg.QueryValueEx(key, "IconUri")[0] == str(icon)
+
+    icon.unlink()
+    notify.register(icon)
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, notify.REGISTRY_KEY) as key:
+        with pytest.raises(FileNotFoundError):
+            winreg.QueryValueEx(key, "IconUri")
