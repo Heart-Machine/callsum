@@ -12,7 +12,13 @@ from .transcribe import Transcriber
 
 
 def _utf8_console() -> None:
-    for stream in (sys.stdout, sys.stderr):
+    """Все три потока — в UTF-8.
+
+    Ввод не менее важен, чем вывод: в режиме мотора приложение присылает пути
+    с кириллицей, а без этой строки они читаются в кодировке консоли и
+    превращаются в мусор.
+    """
+    for stream in (sys.stdout, sys.stderr, sys.stdin):
         try:
             stream.reconfigure(encoding="utf-8")
         except (AttributeError, ValueError):
@@ -89,6 +95,13 @@ def cmd_watch(args, cfg) -> int:
     except KeyboardInterrupt:
         print("\nОстановлено.")
     return 0
+
+
+def cmd_serve(args, cfg) -> int:
+    """Режим мотора: ядром управляет настольное приложение по JSON-строкам."""
+    from .serve import serve
+
+    return serve(cfg)
 
 
 def cmd_obs_setup(args, cfg) -> int:
@@ -203,6 +216,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("transcript", help="transcript.md или папка с ним")
     p.set_defaults(func=cmd_summarize)
 
+    p = sub.add_parser("serve", help="работать мотором: команды JSON в stdin, события в stdout")
+    p.set_defaults(func=cmd_serve)
+
     p = sub.add_parser("obs-setup", help="создать в OBS профиль под запись созвонов")
     p.add_argument("--name", default="callsum", help="имя профиля и коллекции сцен")
     p.set_defaults(func=cmd_obs_setup)
@@ -238,7 +254,11 @@ def main(argv: list[str] | None = None) -> int:
     except config.ConfigError as exc:
         return _report_config_error(str(exc), args.command == "gui")
     if cfg.created:
-        print(f"Создан {cfg.source} из {config.EXAMPLE_NAME} — настройки правьте в нём.")
+        # В поток ошибок: в режиме мотора в stdout идёт только протокол.
+        print(
+            f"Создан {cfg.source} из {config.EXAMPLE_NAME} — настройки правьте в нём.",
+            file=sys.stderr,
+        )
     return args.func(args, cfg)
 
 

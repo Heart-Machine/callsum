@@ -3,11 +3,26 @@
 from __future__ import annotations
 
 import shutil
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
+def _base_dir() -> Path:
+    """Папка, относительно которой лежат config.toml и папки пользователя.
+
+    В собранном ядре код распакован во внутренний каталог, а настройки и записи
+    должны лежать рядом с исполняемым файлом, а не внутри сборки.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+# Данные пользователя: config.toml, recordings, out.
+ROOT = _base_dir()
+# Ресурсы самой программы: промпты и пример настроек — они внутри сборки.
+RESOURCES = Path(__file__).resolve().parent.parent
 
 # В репозитории лежит только пример: config.toml — личный файл пользователя
 # (в нём пути, выбранная модель, любимый редактор) и в git не попадает.
@@ -115,6 +130,8 @@ def ensure_config(cfg_path: Path) -> bool:
     с комментариями, чем искать параметры в коде.
     """
     example = cfg_path.parent / EXAMPLE_NAME
+    if not example.is_file():
+        example = RESOURCES / EXAMPLE_NAME
     if cfg_path.exists() or not example.is_file():
         return False
     shutil.copyfile(example, cfg_path)

@@ -16,6 +16,14 @@ def _register_cuda_dlls() -> None:
     """
     if os.name != "nt":
         return
+    if getattr(sys, "frozen", False):
+        # В собранном ядре библиотеки лежат рядом с исполняемым файлом.
+        for folder in (Path(sys.executable).parent, Path(__file__).resolve().parent.parent):
+            try:
+                os.add_dll_directory(str(folder))
+            except OSError:
+                pass
+        return
     for site in sys.path:
         nvidia = Path(site) / "nvidia"
         if not nvidia.is_dir():

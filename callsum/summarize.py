@@ -8,9 +8,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from .config import ROOT
+from .config import RESOURCES
 
-PROMPTS = ROOT / "prompts"
+PROMPTS = RESOURCES / "prompts"
 
 
 class OllamaError(RuntimeError):
