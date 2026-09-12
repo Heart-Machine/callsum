@@ -6,7 +6,7 @@
 
 <!--
 Шаги для проверки на своей машине. Не забыть:
-- git fetch origin && git switch <ветка>
+- git fetch origin; git switch <ветка>   (в PowerShell разделитель — точка с запятой)
 - нужно ли `pip install -r requirements.txt` (менялись ли зависимости)
 - нужно ли перезапустить приложение или OBS
 -->
