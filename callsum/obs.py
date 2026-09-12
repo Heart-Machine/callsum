@@ -272,7 +272,7 @@ class ObsSetup:
         rec_dir.mkdir(parents=True, exist_ok=True)
         for section, key, value in (
             ("Output", "Mode", "Advanced"),
-            ("Output", "FilenameFormatting", "%CCYY-%MM-%DD %hh-%mm-%ss созвон"),
+            ("Output", "FilenameFormatting", self._filename_format()),
             ("AdvOut", "RecType", "Standard"),
             ("AdvOut", "RecFormat2", "mkv"),
             # Битовая маска дорожек: 1 (микрофон) + 2 (звук системы) = 3.
@@ -283,6 +283,7 @@ class ObsSetup:
             obs.set_profile_parameter(section, key, value)
         obs.set_recording_folder(rec_dir)
         self.log(f"Запись: mkv, дорожки 1+2, папка {rec_dir}")
+        self.log(f"Имя файла записи: {self._filename_format()}")
 
         # Звук: 96 кбит/с на дорожку — для речи с запасом, а файл втрое легче.
         for track in (1, 2):
@@ -308,6 +309,12 @@ class ObsSetup:
         self._route_audio()
         self._apply(name)
         self.log("Готово. Вернуть свои настройки: меню «Профиль» и «Коллекция сцен» в OBS.")
+
+    def _filename_format(self) -> str:
+        """Шаблон имени файла записи — в синтаксисе OBS (%CCYY, %MM, %hh…)."""
+        return str(
+            self.cfg.obs.get("filename_format") or "%CCYY-%MM-%DD %hh-%mm-%ss"
+        )
 
     def _apply(self, name: str) -> None:
         """Перечитать профиль: переключаем его туда-обратно.

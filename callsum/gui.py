@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
-from . import config, obs
+from . import config, naming, obs
 from .pipeline import process
 from .transcribe import Transcriber, hhmmss
 from .view import open_document, reveal
@@ -60,10 +60,11 @@ class Worker(QObject):
     @Slot(str, bool)
     def handle(self, path: str, force: bool) -> None:
         src = Path(path)
-        done = self.cfg.path("out") / src.stem / "transcript.md"
+        folder = naming.folder_name(src, self.cfg.paths.get("folder_template", ""))
+        done = self.cfg.path("out") / folder / "transcript.md"
         if done.exists() and not force:
             self.message.emit(f"{src.name}: уже обработан, пропускаю")
-            self.done.emit(src.stem, str(done.parent), (done.parent / "summary.md").exists())
+            self.done.emit(folder, str(done.parent), (done.parent / "summary.md").exists())
             return
         try:
             if self._transcriber is None:
@@ -79,7 +80,7 @@ class Worker(QObject):
                     stage, -1.0 if frac is None else frac, detail
                 ),
             )
-            self.done.emit(src.stem, str(res.out_dir), res.summary_md.exists())
+            self.done.emit(res.out_dir.name, str(res.out_dir), res.summary_md.exists())
         except Exception as exc:  # noqa: BLE001 — ошибка одной записи не роняет приложение
             self.failed.emit(src.name, str(exc))
 
@@ -101,6 +102,8 @@ class MainWindow(QMainWindow):
         self.recording_since: datetime | None = None
         self.queue_len = 0
         self.previous_profile: str | None = None
+        # Нажатие уже отправлено в OBS, ждём от него подтверждения событием.
+        self.record_pending = False
 
         self.setWindowTitle("callsum — запись созвонов")
         self.setWindowIcon(dot_icon("#c0392b"))
@@ -160,7 +163,7 @@ class MainWindow(QMainWindow):
         row.addWidget(folder)
         layout.addLayout(row)
 
-        layout.addWidget(QLabel("Последние созвоны:"))
+        layout.addWidget(QLabel("Последние записи:"))
         self.calls = QListWidget()
         self.calls.itemDoubleClicked.connect(self._open_selected)
         layout.addWidget(self.calls, 1)
@@ -240,14 +243,44 @@ class MainWindow(QMainWindow):
             self._set_recording_ui(True)
 
     def toggle_record(self) -> None:
+        """Команда OBS выполняется не мгновенно — пока она идёт, кнопка занята.
+
+        Иначе по ней успевают нажать несколько раз: OBS переключает профиль и
+        закрывает файл за секунду-другую, а интерфейс всё это время выглядит
+        так, будто нажатие не сработало.
+        """
+        if self.record_pending:
+            return
+        starting = self.recording_since is None
+        self._set_button_busy("Запускаю…" if starting else "Останавливаю…")
         try:
-            if self.recording_since is None:
+            if starting:
                 self._switch_profile()
                 self.obs.start_record()
             else:
                 self.obs.stop_record()
         except Exception as exc:  # noqa: BLE001 — показываем и работаем дальше
+            self._release_button()
             QMessageBox.warning(self, "OBS", f"Не вышло: {exc}")
+            return
+        # Подтверждение придёт событием от OBS; если оно почему-то не придёт,
+        # кнопку нужно вернуть в рабочее состояние, а не оставлять мёртвой.
+        QTimer.singleShot(15000, self._release_button)
+
+    def _set_button_busy(self, title: str) -> None:
+        self.record_pending = True
+        self.record_button.setEnabled(False)
+        self.record_button.setText(title)
+        self.tray_record.setEnabled(False)
+        self.stage_label.setText(title)
+
+    def _release_button(self) -> None:
+        if not self.record_pending:
+            return
+        self.record_pending = False
+        self.record_button.setEnabled(self.obs.connected)
+        self.tray_record.setEnabled(True)
+        self._set_recording_ui(self.recording_since is not None)
 
     def _switch_profile(self) -> None:
         """Перед записью включить профиль callsum, запомнив прежний."""
@@ -282,6 +315,9 @@ class MainWindow(QMainWindow):
     @Slot(bool, str)
     def on_record_state(self, active: bool, path: str) -> None:
         """Реагируем и на свою кнопку, и на хоткей OBS — источник команды не важен."""
+        self.record_pending = False
+        self.record_button.setEnabled(True)
+        self.tray_record.setEnabled(True)
         if active:
             self.recording_since = datetime.now()
             self._set_recording_ui(True)
@@ -340,7 +376,7 @@ class MainWindow(QMainWindow):
         )
         self.refresh_calls()
         self.tray.showMessage(
-            "Созвон обработан",
+            "Запись обработана",
             f"{name}: {'протокол и расшифровка готовы' if has_summary else 'расшифровка готова'}",
             QSystemTrayIcon.Information,
             8000,
@@ -365,7 +401,7 @@ class MainWindow(QMainWindow):
             self.queue_len += 1
             self.enqueue.emit(path, True)
 
-    # --- список созвонов ---------------------------------------------
+    # --- список записей ---------------------------------------------
     def refresh_calls(self) -> None:
         out_root = self.cfg.path("out")
         self.calls.clear()
@@ -390,7 +426,7 @@ class MainWindow(QMainWindow):
     def _open_result(self, filename: str | None) -> None:
         folder = self._selected_folder()
         if folder is None:
-            QMessageBox.information(self, "callsum", "Выберите созвон в списке.")
+            QMessageBox.information(self, "callsum", "Выберите запись в списке.")
             return
         if filename is None:
             reveal(folder)

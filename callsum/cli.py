@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import config, summarize, watch
+from . import config, naming, summarize, watch
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -43,7 +43,8 @@ def cmd_process(args, cfg) -> int:
     transcriber: Transcriber | None = None
     failed = 0
     for src in files:
-        if not args.force and (out_root / src.stem / "transcript.md").exists():
+        folder = naming.folder_name(src, cfg.paths.get("folder_template", ""))
+        if not args.force and (out_root / folder / "transcript.md").exists():
             print(f"= {src.name}: уже обработан (--force чтобы переделать)")
             continue
         try:

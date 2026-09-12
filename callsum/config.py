@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_NAME = "config.example.toml"
 
 DEFAULTS: dict[str, Any] = {
-    "paths": {"recordings": "recordings", "out": "out"},
+    "paths": {"recordings": "recordings", "out": "out", "folder_template": "{name}"},
     "audio": {
         "extensions": [".mkv", ".mp4", ".mka", ".m4a", ".mp3", ".wav", ".flac", ".opus", ".webm"],
         "stable_seconds": 20,
@@ -33,6 +33,7 @@ DEFAULTS: dict[str, Any] = {
     "view": {"markdown_app": ""},
     "obs": {
         "profile": "callsum",
+        "filename_format": "%CCYY-%MM-%DD %hh-%mm-%ss",
         "auto_switch": True,
         "restore_after": True,
         "host": "127.0.0.1",

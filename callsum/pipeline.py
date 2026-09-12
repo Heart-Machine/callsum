@@ -8,7 +8,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from . import audio, merge, summarize
+from . import audio, merge, naming, summarize
 from .transcribe import Segment, Transcriber, hhmmss
 
 
@@ -65,7 +65,7 @@ def process(
     {"audio", "transcribe", "summary", "done"}, fraction в [0, 1] или None."""
     src = Path(src).resolve()
     out_root = Path(out_root) if out_root else cfg.path("out")
-    out_dir = out_root / src.stem
+    out_dir = out_root / naming.folder_name(src, cfg.paths.get("folder_template", ""))
     out_dir.mkdir(parents=True, exist_ok=True)
     res = Result(out_dir)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from . import naming
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -16,8 +17,8 @@ def _candidates(folder: Path, exts: set[str]) -> list[Path]:
     )
 
 
-def _is_done(src: Path, out_root: Path) -> bool:
-    return (out_root / src.stem / "transcript.md").exists()
+def _is_done(src: Path, out_root: Path, template: str = "") -> bool:
+    return (out_root / naming.folder_name(src, template) / "transcript.md").exists()
 
 
 def _is_stable(src: Path, seconds: float) -> bool:
@@ -46,7 +47,7 @@ def run(cfg, once: bool = False, interval: float = 10.0, do_summary: bool = True
     seen_failed: set[Path] = set()
     while True:
         for src in _candidates(folder, exts):
-            if _is_done(src, out_root) or src in seen_failed:
+            if _is_done(src, out_root, cfg.paths.get("folder_template", "")) or src in seen_failed:
                 continue
             if not _is_stable(src, stable):
                 log(f"…{src.name} ещё пишется, жду")
