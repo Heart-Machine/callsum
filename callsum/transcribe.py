@@ -94,9 +94,29 @@ class Transcriber:
         if self.verbose:
             print(msg, flush=True)
 
+    def release(self) -> None:
+        """Убрать веса из видеопамяти, оставив их в обычной.
+
+        Пока модель распознавания занимает свою долю карты, языковой модели
+        не хватает места: она начинает возить данные через системную память,
+        и протокол готовится в десятки раз дольше. Замер на карте 12 ГБ: один
+        и тот же запрос — 4 секунды без модели распознавания и 47 секунд с ней.
+        Обратная загрузка идёт из памяти, а не с диска, и занимает меньше секунды.
+        """
+        model = getattr(self.model, "model", None)
+        if model is None or not getattr(model, "model_is_loaded", False):
+            return
+        model.unload_model(to_cpu=True)
+
+    def _ensure_loaded(self) -> None:
+        model = getattr(self.model, "model", None)
+        if model is not None and not model.model_is_loaded:
+            model.load_model()
+
     def run(
         self, wav: Path, speaker: str, total_seconds: float = 0.0, on_progress=None
     ) -> list[Segment]:
+        self._ensure_loaded()
         tr = self.cfg.transcribe
         segments, info = self.model.transcribe(
             str(wav),
