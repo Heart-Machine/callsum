@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+
+from callsum import config
 from callsum.view import build_open_command
 
 DOC = Path(r"D:\Записи\созвон\summary.md")
@@ -36,3 +39,19 @@ def test_link_percent_encodes_the_path():
     assert command[:4] == ["cmd", "/c", "start", ""]
     assert command[4].startswith("obsidian://open?path=D%3A%5C")
     assert " " not in command[4]
+
+
+def test_broken_config_gives_a_readable_error(tmp_path):
+    """Окно запускается без консоли — ошибка должна объяснять себя сама."""
+    bad = tmp_path / "config.toml"
+    # Частая ошибка: путь Windows в двойных кавычках, где слеш не удвоен.
+    bad.write_text('[view]\nmarkdown_app = "C:\\Program Files\\Typora.exe"\n', encoding="utf-8")
+    with pytest.raises(config.ConfigError, match="одинарных кавычках"):
+        config.load(bad)
+
+
+def test_single_quoted_windows_path_is_accepted(tmp_path):
+    """Одинарные кавычки в TOML — литеральная строка, удваивать слеши не нужно."""
+    good = tmp_path / "config.toml"
+    good.write_text("[view]\nmarkdown_app = 'C:\\Program Files\\Typora.exe'\n", encoding="utf-8")
+    assert config.load(good).view["markdown_app"] == r"C:\Program Files\Typora.exe"

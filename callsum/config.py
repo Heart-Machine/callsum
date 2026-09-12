@@ -57,6 +57,10 @@ def _merge(base: dict, over: dict) -> dict:
     return out
 
 
+class ConfigError(RuntimeError):
+    """Конфиг есть, но его не удалось прочитать."""
+
+
 class Config:
     def __init__(self, data: dict[str, Any], source: Path | None = None):
         self.data = data
@@ -96,7 +100,15 @@ class Config:
 def load(path: str | Path | None = None) -> Config:
     cfg_path = Path(path) if path else (ROOT / "config.toml")
     if cfg_path.exists():
-        with cfg_path.open("rb") as fh:
-            user = tomllib.load(fh)
+        try:
+            with cfg_path.open("rb") as fh:
+                user = tomllib.load(fh)
+        except tomllib.TOMLDecodeError as exc:
+            raise ConfigError(
+                f"Не удалось прочитать {cfg_path}:\n{exc}\n\n"
+                "Частая причина — путь Windows в двойных кавычках: обратный слеш там "
+                "нужно удваивать. Проще записать путь в одинарных кавычках: "
+                r"'C:\Program Files\Typora\Typora.exe'"
+            ) from exc
         return Config(_merge(DEFAULTS, user), cfg_path)
     return Config(DEFAULTS, None)

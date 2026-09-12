@@ -214,10 +214,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _report_config_error(message: str, graphical: bool) -> int:
+    """Окно запускается через pythonw без консоли — там ошибку видно только окном."""
+    print(message)
+    if graphical:
+        try:
+            from PySide6.QtWidgets import QApplication, QMessageBox
+
+            app = QApplication.instance() or QApplication([])
+            QMessageBox.critical(None, "callsum: ошибка в config.toml", message)
+            del app
+        except Exception:  # noqa: BLE001 — если и окно не поднялось, остаётся печать
+            pass
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     _utf8_console()
     args = build_parser().parse_args(argv)
-    cfg = config.load(args.config)
+    try:
+        cfg = config.load(args.config)
+    except config.ConfigError as exc:
+        return _report_config_error(str(exc), args.command == "gui")
     return args.func(args, cfg)
 
 
