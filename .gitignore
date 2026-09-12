@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+recordings/
+out/
+*.wav
+.pytest_cache/
+*.mkv
+*.mp4
+*.mka
+*.m4a
+*.mp3
