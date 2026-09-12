@@ -24,6 +24,9 @@ from .view import open_document, reveal
 # Имя канала для проверки «не запущены ли мы уже».
 SINGLE_INSTANCE_KEY = "callsum-single-instance"
 
+WINDOW_TITLE = "callsum"
+WINDOW_TITLE_RECORDING = "callsum — Идёт запись"
+
 STAGE_TEXT = {
     "audio": "Готовлю дорожки…",
     "transcribe": "Распознаю речь",
@@ -106,7 +109,7 @@ class MainWindow(QMainWindow):
         # Нажатие уже отправлено в OBS, ждём от него подтверждения событием.
         self.record_pending = False
 
-        self.setWindowTitle("callsum — запись созвонов")
+        self.setWindowTitle(WINDOW_TITLE)
         self.setWindowIcon(dot_icon("#c0392b"))
         self.resize(560, 640)
         self._build_ui()
@@ -335,6 +338,9 @@ class MainWindow(QMainWindow):
             self.append_log("! OBS не сообщил путь к файлу — обработайте его вручную")
 
     def _set_recording_ui(self, active: bool) -> None:
+        # Заголовок окна показывает состояние: видно и со свёрнутым окном,
+        # по подписи в панели задач.
+        self.setWindowTitle(WINDOW_TITLE_RECORDING if active else WINDOW_TITLE)
         title = "■ Остановить запись" if active else "● Начать запись"
         self.record_button.setText(title)
         self.tray_record.setText(title)
@@ -532,7 +538,6 @@ def main(cfg=None) -> int:
     notify.register()
     app = QApplication(sys.argv)
     app.setApplicationName(notify.APP_DISPLAY_NAME)
-    app.setApplicationDisplayName(notify.APP_DISPLAY_NAME)
     # Значок рисует Qt, поэтому дописываем регистрацию, когда он уже доступен.
     notify.register(save_icon())
     app.setQuitOnLastWindowClosed(False)

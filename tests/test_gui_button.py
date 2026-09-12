@@ -104,3 +104,15 @@ def test_release_timer_recovers_a_lost_confirmation(window):
 
     assert window.record_pending is False
     assert window.record_button.isEnabled() is True
+
+
+def test_window_title_shows_recording_state(window):
+    from callsum.gui import WINDOW_TITLE, WINDOW_TITLE_RECORDING
+
+    assert window.windowTitle() == WINDOW_TITLE
+
+    window.on_record_state(True, "")
+    assert window.windowTitle() == WINDOW_TITLE_RECORDING
+
+    window.on_record_state(False, "")
+    assert window.windowTitle() == WINDOW_TITLE
