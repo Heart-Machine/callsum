@@ -1,0 +1,26 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    # Windows намеренно: приложение работает только на нём, а тесты разбирают
+    # пути Windows и реестр — на Linux они проверяли бы не то.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Установка зависимостей
+        # Только то, что нужно тестам: faster-whisper с библиотеками CUDA весит
+        # гигабайты, а в тестах не участвует — модель распознавания подменена.
+        run: pip install pytest PySide6-Essentials websocket-client
+
+      - name: Тесты
+        run: python -m pytest tests -q
