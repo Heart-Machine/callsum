@@ -10,3 +10,5 @@ out/
 *.m4a
 *.mp3
 config.toml
+dist/
+build/
