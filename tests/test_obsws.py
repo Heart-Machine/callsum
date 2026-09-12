@@ -18,6 +18,11 @@ def test_auth_follows_the_protocol_formula():
     assert build_auth(password, salt, challenge) == expected
 
 
+# Выдуманный ответ поддельного OBS. К диску никто не обращается: значение
+# только проверяется на равенство, файла по этому пути не существует.
+FAKE_RECORDING = "D:/созвон.mkv"
+
+
 class FakeSocket:
     """Мини-OBS: отвечает на рукопожатие и на запросы по их requestId."""
 
@@ -59,7 +64,7 @@ class FakeSocket:
                         {"result": True, "code": 100} if ok
                         else {"result": False, "code": 501, "comment": "запись не идёт"}
                     ),
-                    "responseData": {"outputPath": "D:/созвон.mkv"} if ok else None,
+                    "responseData": {"outputPath": FAKE_RECORDING} if ok else None,
                 },
             }))
 
@@ -106,7 +111,7 @@ def test_missing_password_is_reported_clearly(fake_obs):
 def test_request_returns_response_data(fake_obs):
     client = ObsWsClient(password="пароль")
     client.connect()
-    assert client.request("StopRecord")["outputPath"] == "D:/созвон.mkv"
+    assert client.request("StopRecord")["outputPath"] == FAKE_RECORDING
     assert FakeSocket.instances[0].sent[-1]["d"]["requestType"] == "StopRecord"
     client.close()
 
@@ -127,7 +132,7 @@ def test_events_reach_the_callback(fake_obs):
     client.connect()
     FakeSocket.instances[0].push_event(
         "RecordStateChanged",
-        {"outputState": "OBS_WEBSOCKET_OUTPUT_STOPPED", "outputPath": "D:/созвон.mkv"},
+        {"outputState": "OBS_WEBSOCKET_OUTPUT_STOPPED", "outputPath": FAKE_RECORDING},
     )
     for _ in range(200):
         if seen:
@@ -138,7 +143,7 @@ def test_events_reach_the_callback(fake_obs):
     client.close()
     assert seen == [
         ("RecordStateChanged",
-         {"outputState": "OBS_WEBSOCKET_OUTPUT_STOPPED", "outputPath": "D:/созвон.mkv"}),
+         {"outputState": "OBS_WEBSOCKET_OUTPUT_STOPPED", "outputPath": FAKE_RECORDING}),
     ]
 
 
