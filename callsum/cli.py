@@ -236,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg = config.load(args.config)
     except config.ConfigError as exc:
         return _report_config_error(str(exc), args.command == "gui")
+    if cfg.created:
+        print(f"Создан {cfg.source} из {config.EXAMPLE_NAME} — настройки правьте в нём.")
     return args.func(args, cfg)
 
 

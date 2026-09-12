@@ -9,3 +9,4 @@ out/
 *.mka
 *.m4a
 *.mp3
+config.toml

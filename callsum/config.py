@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import shutil
 import tomllib
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# В репозитории лежит только пример: config.toml — личный файл пользователя
+# (в нём пути, выбранная модель, любимый редактор) и в git не попадает.
+EXAMPLE_NAME = "config.example.toml"
 
 DEFAULTS: dict[str, Any] = {
     "paths": {"recordings": "recordings", "out": "out"},
@@ -62,9 +67,11 @@ class ConfigError(RuntimeError):
 
 
 class Config:
-    def __init__(self, data: dict[str, Any], source: Path | None = None):
+    def __init__(self, data: dict[str, Any], source: Path | None = None, created: bool = False):
         self.data = data
         self.source = source
+        # Правда ли, что файл только что создан из примера — чтобы сказать об этом.
+        self.created = created
 
     @property
     def paths(self) -> dict: return self.data["paths"]
@@ -97,8 +104,24 @@ class Config:
         return str(self.speakers.get(str(track_no), f"Дорожка {track_no}"))
 
 
+def ensure_config(cfg_path: Path) -> bool:
+    """Создать config.toml из примера, если его ещё нет.
+
+    Возвращает True, если файл был создан. Без него программа тоже работает —
+    все значения продублированы в DEFAULTS, — но править удобнее файл
+    с комментариями, чем искать параметры в коде.
+    """
+    example = cfg_path.parent / EXAMPLE_NAME
+    if cfg_path.exists() or not example.is_file():
+        return False
+    shutil.copyfile(example, cfg_path)
+    return True
+
+
 def load(path: str | Path | None = None) -> Config:
     cfg_path = Path(path) if path else (ROOT / "config.toml")
+    # Свой путь пользователь указал сам: создавать что-то за него не нужно.
+    created = ensure_config(cfg_path) if path is None else False
     if cfg_path.exists():
         try:
             with cfg_path.open("rb") as fh:
@@ -110,5 +133,5 @@ def load(path: str | Path | None = None) -> Config:
                 "нужно удваивать. Проще записать путь в одинарных кавычках: "
                 r"'C:\Program Files\Typora\Typora.exe'"
             ) from exc
-        return Config(_merge(DEFAULTS, user), cfg_path)
+        return Config(_merge(DEFAULTS, user), cfg_path, created)
     return Config(DEFAULTS, None)

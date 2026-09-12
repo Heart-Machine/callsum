@@ -114,6 +114,9 @@ class MainWindow(QMainWindow):
         self.clock.timeout.connect(self._tick)
         self.clock.start(1000)
 
+        if cfg.created:
+            self.append_log(f"Создан {cfg.source} из {config.EXAMPLE_NAME}")
+
         QTimer.singleShot(0, self.connect_obs)
         self.refresh_calls()
 
