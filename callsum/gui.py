@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,7 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QVBoxLayout, QWidget,
 )
 
-from . import config, naming, obs
+from . import config, naming, notify, obs
 from .pipeline import process
 from .transcribe import Transcriber, hhmmss
 from .view import open_document, reveal
@@ -375,11 +376,9 @@ class MainWindow(QMainWindow):
             "Готово, обрабатываю следующий" if self.queue_len else "Готово"
         )
         self.refresh_calls()
-        self.tray.showMessage(
+        self.notify_user(
             "Запись обработана",
             f"{name}: {'протокол и расшифровка готовы' if has_summary else 'расшифровка готова'}",
-            QSystemTrayIcon.Information,
-            8000,
         )
 
     @Slot(str, str)
@@ -388,9 +387,7 @@ class MainWindow(QMainWindow):
         self.progress.hide()
         self.stage_label.setText("Ошибка обработки")
         self.append_log(f"! {name}: {error}")
-        self.tray.showMessage(
-            "Не получилось обработать", f"{name}: {error}", QSystemTrayIcon.Warning, 10000
-        )
+        self.notify_user("Не получилось обработать", f"{name}: {error}", warning=True)
 
     def pick_file(self) -> None:
         exts = " ".join(f"*{e}" for e in self.cfg.audio["extensions"])
@@ -449,6 +446,17 @@ class MainWindow(QMainWindow):
         self._open_result("summary.md" if (folder / "summary.md").exists() else "transcript.md")
 
     # --- служебное ---------------------------------------------------
+    def notify_user(self, title: str, text: str, warning: bool = False) -> None:
+        """Уведомление от имени callsum, а не от имени pythonw.exe.
+
+        Подсказка из трея остаётся запасным вариантом: она подписана именем
+        процесса, зато работает там, где системные уведомления недоступны.
+        """
+        if notify.toast(title, text):
+            return
+        icon = QSystemTrayIcon.Warning if warning else QSystemTrayIcon.Information
+        self.tray.showMessage(title, text, icon, 8000)
+
     def append_log(self, text: str) -> None:
         self.log.appendPlainText(str(text).rstrip())
 
@@ -461,11 +469,9 @@ class MainWindow(QMainWindow):
         """Крестик прячет окно в трей: запись и обработка не прерываются."""
         event.ignore()
         self.hide()
-        self.tray.showMessage(
+        self.notify_user(
             "callsum свернулся в трей",
             "Запись и обработка продолжаются. Выход — через меню значка.",
-            QSystemTrayIcon.Information,
-            4000,
         )
 
     def shutdown(self) -> None:
@@ -504,8 +510,31 @@ def _already_running() -> bool:
     return True
 
 
+def save_icon() -> Path | None:
+    """Сохранить значок файлом — Windows берёт картинку для уведомления с диска.
+
+    Рисуем мы его в коде, поэтому файл создаётся рядом с настройками
+    пользователя, а не тащится в репозиторий.
+    """
+    folder = Path(os.environ.get("LOCALAPPDATA", "")) / "callsum"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / "icon.png"
+        if not target.exists() and not dot_icon("#c0392b").pixmap(128, 128).save(str(target)):
+            return None
+    except OSError:
+        return None
+    return target
+
+
 def main(cfg=None) -> int:
+    # Имя приложения нужно объявить до создания окон.
+    notify.register()
     app = QApplication(sys.argv)
+    app.setApplicationName(notify.APP_DISPLAY_NAME)
+    app.setApplicationDisplayName(notify.APP_DISPLAY_NAME)
+    # Значок рисует Qt, поэтому дописываем регистрацию, когда он уже доступен.
+    notify.register(save_icon())
     app.setQuitOnLastWindowClosed(False)
     if _already_running():
         print("callsum уже запущен — показываю его окно.")
