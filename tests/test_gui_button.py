@@ -1,6 +1,8 @@
 """Тесты отзывчивости кнопки записи: нажал — кнопка занята до ответа OBS."""
 
 import copy
+import threading
+import time
 
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -16,6 +18,9 @@ class StubObs:
         self.calls = []
         self.connected = True
         self.fail = False
+        # Насколько медленно «подключается» OBS и в каком потоке это случилось.
+        self.delay = 0.0
+        self.connect_thread = None
 
     def start_record(self):
         self.calls.append("start")
@@ -29,6 +34,9 @@ class StubObs:
 
     def connect(self):
         """Окно пробует подключиться по таймеру — пусть находит готовое соединение."""
+        if self.delay:
+            time.sleep(self.delay)
+        self.connect_thread = threading.current_thread().name
         self.connected = True
 
     def subscribe_record_state(self, callback):
@@ -165,7 +173,7 @@ def test_quit_does_not_announce_minimising(window):
 
 def test_lost_connection_reenables_button_when_obs_returns(window):
     """OBS закрыли при работающем приложении — кнопка не должна умереть навсегда."""
-    window.connect_obs()
+    window.on_connect_result(True, "", False)
     assert window.record_button.isEnabled() is True
 
     # OBS закрыли: соединение отвалилось.
@@ -178,7 +186,7 @@ def test_lost_connection_reenables_button_when_obs_returns(window):
 
     # OBS запустили снова: очередная попытка подключения проходит.
     window.obs.connected = True
-    window.connect_obs()
+    window.on_connect_result(True, "", False)
 
     assert window.record_button.isEnabled() is True
     assert window.record_pending is False
@@ -188,7 +196,7 @@ def test_lost_connection_reenables_button_when_obs_returns(window):
 def test_failed_start_does_not_leave_the_button_dead(window, monkeypatch):
     """После ошибки «OBS не запущен» кнопка живёт своей жизнью, а не серым пятном."""
     monkeypatch.setattr("callsum.gui.QMessageBox.warning", lambda *args, **kwargs: None)
-    window.connect_obs()
+    window.on_connect_result(True, "", False)
     window.obs.fail = True
     window.obs.connected = False
 
@@ -199,5 +207,27 @@ def test_failed_start_does_not_leave_the_button_dead(window, monkeypatch):
 
     window.obs.fail = False
     window.obs.connected = True
-    window.connect_obs()
+    window.on_connect_result(True, "", False)
     assert window.record_button.isEnabled() is True
+
+
+def test_connect_does_not_block_the_interface(window):
+    """Подключение к OBS не должно морозить окно: раньше оно шло в потоке интерфейса."""
+    app = QApplication.instance()
+    window.obs.delay = 0.5
+
+    started = time.monotonic()
+    window.connect_obs()
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.1, f"окно ждало подключения {elapsed:.2f} с"
+    assert window.connecting is True
+    assert window.obs_label.text() == "OBS: подключаюсь…"
+
+    deadline = time.monotonic() + 5
+    while window.connecting and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.02)
+
+    assert window.connecting is False, "результат подключения так и не пришёл"
+    assert window.obs.connect_thread != threading.main_thread().name

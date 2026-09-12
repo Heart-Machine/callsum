@@ -89,6 +89,32 @@ class Worker(QObject):
             self.failed.emit(src.name, str(exc))
 
 
+class Connector(QObject):
+    """Подключение к OBS в отдельном потоке.
+
+    Попытка занимает до нескольких секунд (сеть, ожидание ответа), поэтому
+    выполнять её в потоке интерфейса нельзя — окно замирает.
+    """
+
+    finished = Signal(bool, str, bool)   # удалось, текст ошибки, идёт ли запись
+
+    def __init__(self, client, on_record_state):
+        super().__init__()
+        self.obs = client
+        self.on_record_state = on_record_state
+
+    @Slot()
+    def attempt(self) -> None:
+        try:
+            self.obs.connect()
+            self.obs.subscribe_record_state(self.on_record_state)
+            active, _ = self.obs.status()
+        except Exception as exc:  # noqa: BLE001 — наружу уходит текстом в сигнале
+            self.finished.emit(False, str(exc), False)
+            return
+        self.finished.emit(True, "", active)
+
+
 class ObsBridge(QObject):
     """Переносит события OBS из чужого потока в поток интерфейса."""
 
@@ -97,6 +123,7 @@ class ObsBridge(QObject):
 
 class MainWindow(QMainWindow):
     enqueue = Signal(str, bool)
+    connect_requested = Signal()
 
     def __init__(self, cfg):
         super().__init__()
@@ -114,6 +141,8 @@ class MainWindow(QMainWindow):
         self.reconnect_scheduled = False
         # Об отсутствии OBS пишем в журнал один раз, а не каждые три секунды.
         self.reported_offline = False
+        # Попытка подключения выполняется прямо сейчас в рабочем потоке.
+        self.connecting = False
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setWindowIcon(dot_icon("#c0392b"))
@@ -121,6 +150,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_tray()
         self._start_worker()
+        self._start_connector()
 
         self.bridge.record_state.connect(self.on_record_state)
         self.clock = QTimer(self)
@@ -219,6 +249,17 @@ class MainWindow(QMainWindow):
         if reason == QSystemTrayIcon.Trigger:
             self._restore()
 
+    def _start_connector(self) -> None:
+        self.connect_thread = QThread(self)
+        self.connector = Connector(
+            self.obs,
+            lambda active, path: self.bridge.record_state.emit(active, path or ""),
+        )
+        self.connector.moveToThread(self.connect_thread)
+        self.connect_requested.connect(self.connector.attempt)
+        self.connector.finished.connect(self.on_connect_result)
+        self.connect_thread.start()
+
     def _start_worker(self) -> None:
         self.thread = QThread(self)
         self.worker = Worker(self.cfg)
@@ -232,18 +273,27 @@ class MainWindow(QMainWindow):
 
     # --- OBS ---------------------------------------------------------
     def connect_obs(self) -> None:
-        """Подключиться к OBS и продолжать попытки, пока он не появится."""
+        """Запустить попытку подключения. Ответ придёт сигналом от рабочего потока.
+
+        Само подключение — сетевая операция на несколько секунд, и раньше она
+        выполнялась прямо в потоке интерфейса: пока OBS не отвечал, окно
+        замирало на каждую попытку.
+        """
         self.reconnect_scheduled = False
-        try:
-            self.obs.connect()
-            self.obs.subscribe_record_state(
-                lambda active, path: self.bridge.record_state.emit(active, path or "")
-            )
-            active, _ = self.obs.status()
-        except obs.ObsError as exc:
+        if self.connecting:
+            return
+        self.connecting = True
+        self.obs_label.setText("OBS: подключаюсь…")
+        self.connect_requested.emit()
+
+    @Slot(bool, str, bool)
+    def on_connect_result(self, ok: bool, error: str, active: bool) -> None:
+        """Результат попытки подключения, уже в потоке интерфейса."""
+        self.connecting = False
+        if not ok:
             if not self.reported_offline:
                 self.reported_offline = True
-                self.append_log(f"! {exc}")
+                self.append_log(f"! {error}")
             self._schedule_reconnect()
             return
         self.reported_offline = False
@@ -278,7 +328,7 @@ class MainWindow(QMainWindow):
         Раньше связь проверялась только при запуске: если OBS закрывали позже,
         кнопка после первой же ошибки оставалась серой до перезапуска.
         """
-        if self.obs.connected or self.reconnect_scheduled:
+        if self.obs.connected or self.reconnect_scheduled or self.connecting:
             return
         self.append_log("! Связь с OBS потеряна, пробую подключиться заново")
         self.obs.close()
@@ -543,6 +593,8 @@ class MainWindow(QMainWindow):
         self.obs.close()
         self.thread.quit()
         self.thread.wait(5000)
+        self.connect_thread.quit()
+        self.connect_thread.wait(5000)
         self.tray.hide()
 
     def quit_app(self) -> None:
