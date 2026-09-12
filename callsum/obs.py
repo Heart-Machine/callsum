@@ -3,13 +3,30 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from .obsws import ObsWsClient, ObsWsError
+
 PROFILES_DIR = Path(os.environ.get("APPDATA", "")) / "obs-studio" / "basic" / "profiles"
+
+WEBSOCKET_CONFIG = (
+    Path(os.environ.get("APPDATA", ""))
+    / "obs-studio" / "plugin_config" / "obs-websocket" / "config.json"
+)
+
+SETUP_HINT = (
+    "В OBS: «Инструменты» → «Настройки WebSocket-сервера» → включить "
+    "«Включить WebSocket-сервер». Пароль подхватится сам."
+)
+
+PROFILE_NAME = "callsum"
+
+# Раскладка звука: микрофон — дорожка 1, всё, что играет в колонках, — дорожка 2.
+TRACK_BY_KIND = {"wasapi_input_capture": 1, "wasapi_output_capture": 2}
+DEFAULT_INPUT_NAMES = {"wasapi_input_capture": "Микрофон", "wasapi_output_capture": "Звук системы"}
 
 # Пустую чёрную картинку незачем писать с дефолтным битрейтом OBS: на CRF 32
 # час записи занимает единицы мегабайт вместо гигабайта.
@@ -23,21 +40,6 @@ RECORD_ENCODER = {
     "tune": "",
     "x264opts": "",
 }
-
-WEBSOCKET_CONFIG = (
-    Path(os.environ.get("APPDATA", ""))
-    / "obs-studio" / "plugin_config" / "obs-websocket" / "config.json"
-)
-
-SETUP_HINT = (
-    "В OBS: «Инструменты» → «Настройки WebSocket-сервера» → включить "
-    "«Включить WebSocket-сервер». Пароль подхватится сам."
-)
-
-
-# Библиотека печатает полный traceback при каждой неудачной попытке подключения,
-# а мы переподключаемся по таймеру — в логе это выглядит как поломка.
-logging.getLogger("obsws_python").setLevel(logging.CRITICAL)
 
 
 class ObsError(RuntimeError):
@@ -77,91 +79,110 @@ def read_settings(cfg=None) -> ObsSettings:
     return settings
 
 
+def _tracks(active: int) -> dict[str, bool]:
+    return {str(i): i == active for i in range(1, 7)}
+
+
 class Obs:
-    """Тонкая обёртка: подключение, старт/стоп записи, состояние.
+    """Операции с OBS, нужные для записи созвонов.
 
     Отдельно от GUI, чтобы тем же кодом можно было управлять записью из CLI.
     """
 
     def __init__(self, settings: ObsSettings | None = None, cfg=None):
         self.settings = settings or read_settings(cfg)
-        self._req = None
-        self._events = None
+        self._client: ObsWsClient | None = None
 
     # --- подключение -------------------------------------------------
     def connect(self) -> None:
-        import obsws_python as obsws
-
         s = self.settings
+        client = ObsWsClient(host=s.host, port=s.port, password=s.password, timeout=5)
         try:
-            self._req = obsws.ReqClient(
-                host=s.host, port=s.port, password=s.password, timeout=5
-            )
-        except Exception as exc:  # noqa: BLE001 — наружу отдаём одну понятную ошибку
+            client.connect()
+        except ObsWsError as exc:
             if not s.enabled_in_obs:
                 raise ObsError(f"WebSocket-сервер OBS выключен. {SETUP_HINT}") from exc
             raise ObsError(
                 f"Не удалось подключиться к OBS на {s.host}:{s.port}: {exc}. "
                 "Проверьте, что OBS запущен. " + SETUP_HINT
             ) from exc
+        self._client = client
 
     def close(self) -> None:
-        for client in (self._events, self._req):
-            try:
-                if client is not None:
-                    client.disconnect()
-            except Exception:  # noqa: BLE001 — на выходе ошибки разрыва не важны
-                pass
-        self._req = self._events = None
+        if self._client is not None:
+            self._client.close()
+        self._client = None
 
     @property
     def connected(self) -> bool:
-        return self._req is not None
+        return self._client is not None and self._client.connected
 
-    def _client(self):
-        if self._req is None:
+    def call(self, request_type: str, data: dict | None = None) -> dict:
+        """Запрос к OBS с понятной ошибкой наружу."""
+        if self._client is None:
             raise ObsError("Нет подключения к OBS")
-        return self._req
+        try:
+            return self._client.request(request_type, data)
+        except ObsWsError as exc:
+            raise ObsError(str(exc)) from exc
 
     def subscribe_record_state(self, callback) -> None:
         """Подписка на старт/стоп записи — в том числе из самого OBS или по хоткею.
 
         callback(active: bool, path: str | None) вызывается из чужого потока.
         """
-        import obsws_python as obsws
+        if self._client is None:
+            raise ObsError("Нет подключения к OBS")
 
-        s = self.settings
-        self._events = obsws.EventClient(host=s.host, port=s.port, password=s.password)
-
-        def on_record_state_changed(data):
-            state = getattr(data, "output_state", "")
+        def dispatch(event_type: str, data: dict) -> None:
+            if event_type != "RecordStateChanged":
+                return
+            state = data.get("outputState", "")
             if state.endswith("_STARTED"):
                 callback(True, None)
             elif state.endswith("_STOPPED"):
-                callback(False, getattr(data, "output_path", None) or None)
+                callback(False, data.get("outputPath") or None)
 
-        self._events.callback.register(on_record_state_changed)
+        self._client.on_event = dispatch
 
-    # --- команды -----------------------------------------------------
+    # --- запись ------------------------------------------------------
     def start_record(self) -> None:
-        self._client().start_record()
+        self.call("StartRecord")
 
     def stop_record(self) -> str | None:
         """Остановить запись и вернуть путь к файлу (OBS отдаёт его в ответе)."""
-        resp = self._client().stop_record()
-        return getattr(resp, "output_path", None)
+        return self.call("StopRecord").get("outputPath")
 
     def status(self) -> tuple[bool, float]:
         """(идёт ли запись, длительность в секундах)."""
-        resp = self._client().get_record_status()
-        return bool(resp.output_active), float(getattr(resp, "output_duration", 0) or 0) / 1000.0
+        data = self.call("GetRecordStatus")
+        return bool(data.get("outputActive")), float(data.get("outputDuration") or 0) / 1000.0
+
+    def recording_folder(self) -> Path | None:
+        try:
+            return Path(self.call("GetRecordDirectory")["recordDirectory"])
+        except (ObsError, KeyError):  # необязательная информация
+            return None
+
+    def set_recording_folder(self, folder: Path) -> None:
+        self.call("SetRecordDirectory", {"recordDirectory": str(folder)})
 
     # --- профиль и коллекция сцен ------------------------------------
     def current_profile(self) -> str:
-        return self._client().get_profile_list().current_profile_name
+        return str(self.call("GetProfileList")["currentProfileName"])
 
     def profiles(self) -> list[str]:
-        return list(self._client().get_profile_list().profiles)
+        return list(self.call("GetProfileList")["profiles"])
+
+    def create_profile(self, name: str) -> None:
+        self.call("CreateProfile", {"profileName": name})
+
+    def scene_collections(self) -> tuple[str, list[str]]:
+        data = self.call("GetSceneCollectionList")
+        return str(data["currentSceneCollectionName"]), list(data["sceneCollections"])
+
+    def create_scene_collection(self, name: str) -> None:
+        self.call("CreateSceneCollection", {"sceneCollectionName": name})
 
     def set_profile(self, name: str) -> None:
         """Переключить профиль и одноимённую коллекцию сцен.
@@ -169,31 +190,56 @@ class Obs:
         Настройки записи живут в профиле, а раскладка звука по дорожкам —
         в коллекции сцен, поэтому переключать нужно оба.
         """
-        req = self._client()
-        if req.get_profile_list().current_profile_name != name:
-            req.set_current_profile(name)
+        if self.current_profile() != name:
+            self.call("SetCurrentProfile", {"profileName": name})
             time.sleep(1.0)
-        collections = req.get_scene_collection_list()
-        if name in collections.scene_collections and collections.current_scene_collection_name != name:
-            req.set_current_scene_collection(name)
+        current, available = self.scene_collections()
+        if name in available and current != name:
+            self.call("SetCurrentSceneCollection", {"sceneCollectionName": name})
             time.sleep(1.0)
 
-    def recording_folder(self) -> Path | None:
-        try:
-            return Path(self._client().get_record_directory().record_directory)
-        except Exception:  # noqa: BLE001 — необязательная информация
-            return None
+    def set_profile_parameter(self, category: str, name: str, value: str) -> None:
+        self.call(
+            "SetProfileParameter",
+            {"parameterCategory": category, "parameterName": name, "parameterValue": value},
+        )
 
+    def set_video_settings(self, fps: int, width: int, height: int) -> None:
+        self.call(
+            "SetVideoSettings",
+            {
+                "fpsNumerator": fps,
+                "fpsDenominator": 1,
+                "baseWidth": width,
+                "baseHeight": height,
+                "outputWidth": width,
+                "outputHeight": height,
+            },
+        )
 
-PROFILE_NAME = "callsum"
+    # --- источники звука ---------------------------------------------
+    def current_scene(self) -> str:
+        data = self.call("GetCurrentProgramScene")
+        return str(data.get("currentProgramSceneName") or data.get("sceneName") or "")
 
-# Раскладка звука: микрофон — дорожка 1, всё, что играет в колонках, — дорожка 2.
-TRACK_BY_KIND = {"wasapi_input_capture": 1, "wasapi_output_capture": 2}
-DEFAULT_INPUT_NAMES = {"wasapi_input_capture": "Микрофон", "wasapi_output_capture": "Звук системы"}
+    def inputs(self) -> dict[str, str]:
+        """{вид источника: имя источника} — имена зависят от языка OBS."""
+        return {i["inputKind"]: i["inputName"] for i in self.call("GetInputList")["inputs"]}
 
+    def create_input(self, scene: str, name: str, kind: str) -> None:
+        self.call(
+            "CreateInput",
+            {
+                "sceneName": scene,
+                "inputName": name,
+                "inputKind": kind,
+                "inputSettings": {"device_id": "default"},
+                "sceneItemEnabled": True,
+            },
+        )
 
-def _tracks(active: int) -> dict[str, bool]:
-    return {str(i): i == active for i in range(1, 7)}
+    def set_input_track(self, name: str, track: int) -> None:
+        self.call("SetInputAudioTracks", {"inputName": name, "inputAudioTracks": _tracks(track)})
 
 
 class ObsSetup:
@@ -211,15 +257,15 @@ class ObsSetup:
         self.log = log
 
     def run(self, name: str = PROFILE_NAME) -> None:
-        req = self.obs._client()
-        previous = req.get_profile_list().current_profile_name
+        obs = self.obs
+        previous = obs.current_profile()
         self.log(f"Текущий профиль OBS: «{previous}» — он останется нетронутым")
 
-        if name not in req.get_profile_list().profiles:
-            req.create_profile(name)
+        if name not in obs.profiles():
+            obs.create_profile(name)
             self.log(f"Создан профиль «{name}»")
         else:
-            req.set_current_profile(name)
+            obs.set_profile(name)
             self.log(f"Профиль «{name}» уже был, обновляю настройки")
 
         rec_dir = self.cfg.path("recordings")
@@ -234,36 +280,36 @@ class ObsSetup:
             ("AdvOut", "RecFilePath", str(rec_dir)),
             ("AdvOut", "RecEncoder", "obs_x264"),
         ):
-            req.set_profile_parameter(section, key, value)
-        req.set_record_directory(str(rec_dir))
+            obs.set_profile_parameter(section, key, value)
+        obs.set_recording_folder(rec_dir)
         self.log(f"Запись: mkv, дорожки 1+2, папка {rec_dir}")
 
         # Звук: 96 кбит/с на дорожку — для речи с запасом, а файл втрое легче.
         for track in (1, 2):
-            req.set_profile_parameter("AdvOut", f"Track{track}Bitrate", "96")
+            obs.set_profile_parameter("AdvOut", f"Track{track}Bitrate", "96")
         self._write_encoder_settings(name)
 
         # Картинка для протокола не нужна, поэтому холст маленький и 10 кадров/с:
         # файл занимает копейки, а видеокодек почти не ест процессор.
-        req.set_video_settings(10, 1, 640, 360, 640, 360)
+        obs.set_video_settings(10, 640, 360)
         self.log("Видео: 640x360, 10 кадров/с (пустая картинка, нужен только звук)")
 
-        collections = req.get_scene_collection_list().scene_collections
+        _, collections = obs.scene_collections()
         if name not in collections:
-            req.create_scene_collection(name)
+            obs.create_scene_collection(name)
             # OBS перестраивает микшер в UI-потоке; если сразу лезть к
             # источникам, он успевает зависнуть — даём ему договорить.
             time.sleep(2.0)
             self.log(f"Создана коллекция сцен «{name}»")
         else:
-            req.set_current_scene_collection(name)
+            obs.set_profile(name)
             self.log(f"Коллекция сцен «{name}» уже была")
 
-        self._route_audio(req)
-        self._apply(req, name)
+        self._route_audio()
+        self._apply(name)
         self.log("Готово. Вернуть свои настройки: меню «Профиль» и «Коллекция сцен» в OBS.")
 
-    def _apply(self, req, name: str) -> None:
+    def _apply(self, name: str) -> None:
         """Перечитать профиль: переключаем его туда-обратно.
 
         set_profile_parameter правит конфиг, но активный вывод OBS продолжает
@@ -271,13 +317,13 @@ class ObsSetup:
         запись всё ещё шла бы в mp4 с одной дорожкой. Заодно OBS сохраняет
         конфиг на диск, и настройки переживают аварийное завершение.
         """
-        others = [p for p in req.get_profile_list().profiles if p != name]
+        others = [p for p in self.obs.profiles() if p != name]
         if not others:
             self.log("! Перезапустите OBS, чтобы настройки профиля вступили в силу")
             return
-        req.set_current_profile(others[0])
+        self.obs.call("SetCurrentProfile", {"profileName": others[0]})
         time.sleep(1.5)
-        req.set_current_profile(name)
+        self.obs.call("SetCurrentProfile", {"profileName": name})
         time.sleep(1.5)
         self.log("Профиль перечитан, настройки записи активны")
 
@@ -304,16 +350,16 @@ class ObsSetup:
                     return folder
         return None
 
-    def _route_audio(self, req) -> None:
+    def _route_audio(self) -> None:
         """Развести микрофон и звук системы по разным дорожкам."""
-        scene = req.get_current_program_scene().scene_name
-        inputs = {i["inputKind"]: i["inputName"] for i in req.get_input_list().inputs}
+        scene = self.obs.current_scene()
+        inputs = self.obs.inputs()
         for kind, track in TRACK_BY_KIND.items():
             name = inputs.get(kind)
             if name is None:
                 name = DEFAULT_INPUT_NAMES[kind]
-                req.create_input(scene, name, kind, {"device_id": "default"}, True)
+                self.obs.create_input(scene, name, kind)
                 time.sleep(1.0)
                 self.log(f"Добавлен источник «{name}»")
-            req.set_input_audio_tracks(name, _tracks(track))
+            self.obs.set_input_track(name, track)
             self.log(f"«{name}» -> дорожка {track}")

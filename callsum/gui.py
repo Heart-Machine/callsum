@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
@@ -16,8 +17,11 @@ from PySide6.QtWidgets import (
 
 from . import config, obs
 from .pipeline import process
-from .view import open_document, reveal
 from .transcribe import Transcriber, hhmmss
+from .view import open_document, reveal
+
+# Имя канала для проверки «не запущены ли мы уже».
+SINGLE_INSTANCE_KEY = "callsum-single-instance"
 
 STAGE_TEXT = {
     "audio": "Готовлю дорожки…",
@@ -53,9 +57,14 @@ class Worker(QObject):
         self.cfg = cfg
         self._transcriber: Transcriber | None = None
 
-    @Slot(str)
-    def handle(self, path: str) -> None:
+    @Slot(str, bool)
+    def handle(self, path: str, force: bool) -> None:
         src = Path(path)
+        done = self.cfg.path("out") / src.stem / "transcript.md"
+        if done.exists() and not force:
+            self.message.emit(f"{src.name}: уже обработан, пропускаю")
+            self.done.emit(src.stem, str(done.parent), (done.parent / "summary.md").exists())
+            return
         try:
             if self._transcriber is None:
                 self.progress.emit("audio", -1.0, "Загружаю модель распознавания…")
@@ -82,7 +91,7 @@ class ObsBridge(QObject):
 
 
 class MainWindow(QMainWindow):
-    enqueue = Signal(str)
+    enqueue = Signal(str, bool)
 
     def __init__(self, cfg):
         super().__init__()
@@ -281,7 +290,7 @@ class MainWindow(QMainWindow):
         if path:
             self.append_log(f"Запись остановлена: {path}")
             self.queue_len += 1
-            self.enqueue.emit(path)
+            self.enqueue.emit(path, False)
         else:
             self.append_log("! OBS не сообщил путь к файлу — обработайте его вручную")
 
@@ -351,7 +360,7 @@ class MainWindow(QMainWindow):
         )
         if path:
             self.queue_len += 1
-            self.enqueue.emit(path)
+            self.enqueue.emit(path, True)
 
     # --- список созвонов ---------------------------------------------
     def refresh_calls(self) -> None:
@@ -439,10 +448,38 @@ class MainWindow(QMainWindow):
         QApplication.instance().quit()
 
 
+def _already_running() -> bool:
+    """Постучаться в уже запущенный экземпляр и попросить показать окно.
+
+    Два окна подписались бы на события OBS одновременно и принялись бы
+    обрабатывать одну и ту же запись вдвоём, деля видеопамять и очередь Ollama.
+    """
+    probe = QLocalSocket()
+    probe.connectToServer(SINGLE_INSTANCE_KEY)
+    if not probe.waitForConnected(500):
+        return False
+    probe.write(b"show")
+    probe.flush()
+    probe.waitForBytesWritten(500)
+    probe.disconnectFromServer()
+    return True
+
+
 def main(cfg=None) -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+    if _already_running():
+        print("callsum уже запущен — показываю его окно.")
+        return 0
+
     window = MainWindow(cfg or config.load())
+
+    server = QLocalServer(app)
+    # Имя канала остаётся занятым после аварийного завершения, поэтому чистим.
+    QLocalServer.removeServer(SINGLE_INSTANCE_KEY)
+    server.listen(SINGLE_INSTANCE_KEY)
+    server.newConnection.connect(lambda: (server.nextPendingConnection(), window._restore()))
+
     # Выход бывает не только через меню значка: закрытие сессии, Ctrl+C,
     # завершение работы Windows — прибираемся в любом случае.
     app.aboutToQuit.connect(window.shutdown)

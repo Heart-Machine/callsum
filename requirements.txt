@@ -1,5 +1,7 @@
 faster-whisper>=1.2
 nvidia-cublas-cu12
 nvidia-cudnn-cu12
+watchdog
+requests
 PySide6-Essentials
-obsws-python
+websocket-client
