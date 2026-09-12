@@ -110,6 +110,10 @@ class MainWindow(QMainWindow):
         self.record_pending = False
         # Выход начат: окно больше не прячется в трей, а честно закрывается.
         self.stopped = False
+        # Попытка переподключения уже назначена — не плодить их по таймеру.
+        self.reconnect_scheduled = False
+        # Об отсутствии OBS пишем в журнал один раз, а не каждые три секунды.
+        self.reported_offline = False
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setWindowIcon(dot_icon("#c0392b"))
@@ -228,6 +232,8 @@ class MainWindow(QMainWindow):
 
     # --- OBS ---------------------------------------------------------
     def connect_obs(self) -> None:
+        """Подключиться к OBS и продолжать попытки, пока он не появится."""
+        self.reconnect_scheduled = False
         try:
             self.obs.connect()
             self.obs.subscribe_record_state(
@@ -235,18 +241,48 @@ class MainWindow(QMainWindow):
             )
             active, _ = self.obs.status()
         except obs.ObsError as exc:
-            self.obs_label.setText("OBS: нет подключения")
-            self.append_log(f"! {exc}")
-            self.record_button.setEnabled(False)
-            QTimer.singleShot(5000, self.connect_obs)
+            if not self.reported_offline:
+                self.reported_offline = True
+                self.append_log(f"! {exc}")
+            self._schedule_reconnect()
             return
+        self.reported_offline = False
         self.obs_label.setText(
             f"OBS: подключён ({self.obs.settings.host}:{self.obs.settings.port})"
         )
+        self.record_pending = False
         self.record_button.setEnabled(True)
+        self.tray_record.setEnabled(True)
         if active and self.recording_since is None:
             self.recording_since = datetime.now()
-            self._set_recording_ui(True)
+        self._set_recording_ui(self.recording_since is not None)
+
+    def _schedule_reconnect(self) -> None:
+        """Отключение — не приговор: ждём OBS и сами восстанавливаем связь."""
+        self.obs_label.setText("OBS: нет подключения, пробую подключиться…")
+        self.record_pending = False
+        self.record_button.setEnabled(False)
+        self.record_button.setText("● Начать запись")
+        if self.recording_since is not None:
+            # Кто теперь ведёт запись, неизвестно — таймер врал бы.
+            self.recording_since = None
+            self._set_recording_ui(False)
+        self.stage_label.setText("Жду OBS")
+        if not self.reconnect_scheduled:
+            self.reconnect_scheduled = True
+            QTimer.singleShot(3000, self.connect_obs)
+
+    def _watch_connection(self) -> None:
+        """Заметить, что OBS закрыли, и не оставлять кнопку мёртвой.
+
+        Раньше связь проверялась только при запуске: если OBS закрывали позже,
+        кнопка после первой же ошибки оставалась серой до перезапуска.
+        """
+        if self.obs.connected or self.reconnect_scheduled:
+            return
+        self.append_log("! Связь с OBS потеряна, пробую подключиться заново")
+        self.obs.close()
+        self._schedule_reconnect()
 
     def toggle_record(self) -> None:
         """Команда OBS выполняется не мгновенно — пока она идёт, кнопка занята.
@@ -267,7 +303,11 @@ class MainWindow(QMainWindow):
                 self.obs.stop_record()
         except Exception as exc:  # noqa: BLE001 — показываем и работаем дальше
             self._release_button()
-            QMessageBox.warning(self, "OBS", f"Не вышло: {exc}")
+            self._watch_connection()
+            QMessageBox.warning(
+                self, "OBS",
+                f"{exc}\n\nКак только OBS появится, кнопка снова станет доступной.",
+            )
             return
         # Подтверждение придёт событием от OBS; если оно почему-то не придёт,
         # кнопку нужно вернуть в рабочее состояние, а не оставлять мёртвой.
@@ -356,6 +396,7 @@ class MainWindow(QMainWindow):
             self.timer_label.setText("00:00:00")
 
     def _tick(self) -> None:
+        self._watch_connection()
         if self.recording_since is not None:
             seconds = (datetime.now() - self.recording_since).total_seconds()
             self.timer_label.setText(hhmmss(seconds))

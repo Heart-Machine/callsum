@@ -161,3 +161,43 @@ def test_quit_does_not_announce_minimising(window):
 
     assert event.isAccepted() is True
     assert notices == []
+
+
+def test_lost_connection_reenables_button_when_obs_returns(window):
+    """OBS закрыли при работающем приложении — кнопка не должна умереть навсегда."""
+    window.connect_obs()
+    assert window.record_button.isEnabled() is True
+
+    # OBS закрыли: соединение отвалилось.
+    window.obs.connected = False
+    window._tick()
+
+    assert window.record_button.isEnabled() is False
+    assert "нет подключения" in window.obs_label.text()
+    assert window.reconnect_scheduled is True
+
+    # OBS запустили снова: очередная попытка подключения проходит.
+    window.obs.connected = True
+    window.connect_obs()
+
+    assert window.record_button.isEnabled() is True
+    assert window.record_pending is False
+    assert "подключён" in window.obs_label.text()
+
+
+def test_failed_start_does_not_leave_the_button_dead(window, monkeypatch):
+    """После ошибки «OBS не запущен» кнопка живёт своей жизнью, а не серым пятном."""
+    monkeypatch.setattr("callsum.gui.QMessageBox.warning", lambda *args, **kwargs: None)
+    window.connect_obs()
+    window.obs.fail = True
+    window.obs.connected = False
+
+    window.toggle_record()
+
+    assert window.record_pending is False
+    assert window.reconnect_scheduled is True, "должна быть назначена новая попытка"
+
+    window.obs.fail = False
+    window.obs.connected = True
+    window.connect_obs()
+    assert window.record_button.isEnabled() is True
