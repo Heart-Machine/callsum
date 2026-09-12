@@ -26,13 +26,29 @@ def test_xml_special_characters_are_escaped():
     assert "<итог>" not in script
 
 
+TEST_APP_ID = "Callsum.TestOnly"
+
+
+@pytest.fixture
+def test_registration():
+    """Своя запись в реестре: настоящую регистрацию приложения трогать нельзя."""
+    yield TEST_APP_ID
+    if os.name == "nt":
+        import winreg
+
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, notify.registry_key(TEST_APP_ID))
+        except FileNotFoundError:
+            pass
+
+
 @pytest.mark.skipif(os.name != "nt", reason="регистрация приложения есть только в Windows")
-def test_registration_writes_display_name():
+def test_registration_writes_display_name(test_registration):
     import winreg
 
-    assert notify.register() is True
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, notify.REGISTRY_KEY) as key:
-        assert winreg.QueryValueEx(key, "DisplayName")[0] == notify.APP_DISPLAY_NAME
+    assert notify.register(app_id=test_registration, name="callsum") is True
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, notify.registry_key(test_registration)) as key:
+        assert winreg.QueryValueEx(key, "DisplayName")[0] == "callsum"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="регистрация приложения есть только в Windows")

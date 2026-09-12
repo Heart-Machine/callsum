@@ -17,6 +17,10 @@ APP_ID = "Callsum.CallRecorder"
 APP_DISPLAY_NAME = "callsum"
 REGISTRY_KEY = rf"Software\Classes\AppUserModelId\{APP_ID}"
 
+
+def registry_key(app_id: str = APP_ID) -> str:
+    return rf"Software\Classes\AppUserModelId\{app_id}"
+
 # Окно консоли при запуске PowerShell показывать незачем.
 _NO_WINDOW = 0x08000000
 
@@ -32,17 +36,22 @@ $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
 """
 
 
-def register(icon: Path | None = None) -> bool:
-    """Записать имя и значок приложения, под которыми Windows покажет уведомления."""
+def register(icon: Path | None = None, app_id: str = APP_ID, name: str = APP_DISPLAY_NAME) -> bool:
+    """Записать имя и значок приложения, под которыми Windows покажет уведомления.
+
+    Идентификатор задаётся параметром, чтобы тесты не переписывали настоящую
+    регистрацию приложения в реестре пользователя.
+    """
     if os.name != "nt":
         return False
     try:
         import ctypes
         import winreg
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY) as key:
-            winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, APP_DISPLAY_NAME)
+        if app_id == APP_ID:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, registry_key(app_id)) as key:
+            winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, name)
             if icon is not None and Path(icon).is_file():
                 winreg.SetValueEx(key, "IconUri", 0, winreg.REG_SZ, str(Path(icon).resolve()))
             else:
