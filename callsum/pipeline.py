@@ -128,6 +128,9 @@ def process(
     log(f"Транскрипт: {res.transcript_md}")
 
     if do_summary and cfg.summary.get("enabled", True):
+        # Освобождаем видеопамять: языковая модель и модель распознавания
+        # вместе в неё не помещаются, и протокол готовится в разы дольше.
+        tr.release()
         stage("summary", None, "составляю протокол")
         try:
             text = summarize.summarize(dialog, meta, cfg, log=log)

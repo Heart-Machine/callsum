@@ -46,6 +46,8 @@ DEFAULTS: dict[str, Any] = {
         "num_ctx": 8192,
         "temperature": 0.2,
         "think": False,
+        # Как долго Ollama держит модель в видеопамяти после ответа.
+        "keep_alive": "0s",
         "chunk_chars": 12000,
         "chunk_overlap_chars": 1500,
         "timeout_seconds": 1800,

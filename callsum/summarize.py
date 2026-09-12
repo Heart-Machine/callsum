@@ -52,6 +52,10 @@ def _generate(cfg_summary: dict, prompt: str) -> str:
         "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "think": bool(cfg_summary.get("think", False)),
+        # Сколько модель держится в видеопамяти после ответа. По умолчанию
+        # Ollama хранит её пять минут — и всё это время распознавание
+        # следующего созвона делит с ней карту и идёт втрое медленнее.
+        "keep_alive": str(cfg_summary.get("keep_alive", "0s")),
         "options": {
             "num_ctx": int(cfg_summary["num_ctx"]),
             "temperature": float(cfg_summary["temperature"]),
