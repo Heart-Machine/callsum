@@ -243,7 +243,10 @@ def serve(cfg, lines: Iterable[str] | None = None, write: Callable[[str], None] 
 
     try:
         for line in (sys.stdin if lines is None else lines):
-            line = line.strip()
+            # PowerShell дописывает в начало потока метку кодировки (BOM), да и
+            # вообще первый символ строки может оказаться служебным — JSON от
+            # этого не разбирается, поэтому отрезаем.
+            line = line.strip().lstrip("\ufeff").strip()
             if not line:
                 continue
             try:

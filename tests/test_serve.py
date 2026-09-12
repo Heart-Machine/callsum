@@ -206,3 +206,20 @@ def test_console_streams_are_utf8(monkeypatch):
     cli._utf8_console()
 
     assert [s.encoding for s in streams.values()] == ["utf-8"] * 3
+
+
+def test_byte_order_mark_does_not_break_a_command(cfg, monkeypatch):
+    """PowerShell дописывает метку кодировки в начало потока — команда всё равно должна пройти."""
+    calls: list[dict] = []
+    monkeypatch.setattr(serve_module.Engine, "_run", lambda self, command: calls.append(command))
+
+    out: list[str] = []
+    serve(
+        cfg,
+        lines=["\ufeff" + json.dumps({"cmd": "doctor", "id": "1"}),
+               json.dumps({"cmd": "shutdown"})],
+        write=out.append,
+    )
+
+    assert [c["id"] for c in calls] == ["1"]
+    assert not any("Не разобрал" in line for line in out)
