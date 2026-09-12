@@ -237,3 +237,16 @@ def test_doctor_creates_working_folders(cfg):
     assert recordings.is_dir() and out.is_dir()
     assert report["recordings"] == str(recordings)
     assert report["out"] == str(out)
+
+
+def test_mangled_path_hints_at_the_console_encoding(cfg):
+    """Кириллица, потерянная при передаче команды, — частая беда PowerShell."""
+    events = run(cfg, {"cmd": "process", "id": "1", "path": "D:/записи/????????.mkv"})
+    error = next(e for e in events if e["event"] == "error")
+    assert "OutputEncoding" in error["message"]
+
+
+def test_plain_missing_file_has_no_extra_advice(cfg):
+    events = run(cfg, {"cmd": "process", "id": "1", "path": "D:/records/absent.mkv"})
+    error = next(e for e in events if e["event"] == "error")
+    assert "OutputEncoding" not in error["message"]

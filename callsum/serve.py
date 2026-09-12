@@ -103,7 +103,17 @@ class Engine:
         request_id = command.get("id")
         src = Path(str(command.get("path", "")))
         if not src.is_file():
-            self.emit({"event": "error", "id": request_id, "message": f"Нет файла: {src}"})
+            message = f"Нет файла: {src}"
+            if "?" in str(src):
+                # Знаки вопроса вместо букв — потери при передаче команды.
+                # Так делает PowerShell 5.1: конвейер в программу переводит
+                # текст в ASCII, и кириллица в пути гибнет ещё до ядра.
+                message += (
+                    ". Похоже, путь потерял буквы при передаче: в PowerShell перед "
+                    "запуском нужно выполнить $OutputEncoding = "
+                    "[System.Text.Encoding]::UTF8"
+                )
+            self.emit({"event": "error", "id": request_id, "message": message})
             return
 
         out_root = self.cfg.path("out")
