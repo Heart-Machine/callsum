@@ -42,8 +42,27 @@ def test_existing_config_is_never_overwritten(tmp_path):
     assert "notepad++" in target.read_text(encoding="utf-8")
 
 
-def test_missing_example_is_not_an_error(tmp_path):
+def test_missing_example_is_not_an_error(tmp_path, monkeypatch):
+    empty = tmp_path / "resources"
+    empty.mkdir()
+    monkeypatch.setattr(config, "RESOURCES", empty)
     assert config.ensure_config(tmp_path / "config.toml") is False
+
+
+def test_example_is_taken_from_the_bundle_when_missing_next_to_config(tmp_path):
+    """В собранном ядре пример лежит внутри сборки, а config.toml — рядом с exe."""
+    target = tmp_path / "config.toml"
+    assert config.ensure_config(target) is True
+    assert target.read_text(encoding="utf-8") == (
+        (config.RESOURCES / config.EXAMPLE_NAME).read_text(encoding="utf-8")
+    )
+
+
+def test_frozen_build_keeps_user_data_next_to_the_executable(tmp_path, monkeypatch):
+    """Настройки и записи не должны попадать внутрь распакованной сборки."""
+    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(config.sys, "executable", str(tmp_path / "callsum-core.exe"))
+    assert config._base_dir() == tmp_path
 
 
 def test_partial_config_falls_back_to_defaults(tmp_path):
