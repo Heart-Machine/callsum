@@ -5,6 +5,9 @@ namespace Callsum.Core;
 /// <summary>Стадии обработки, о которых ядро сообщает по ходу работы.</summary>
 public static class EngineStage
 {
+    /// <summary>Первое распознавание на машине: программа доносит библиотеки CUDA.</summary>
+    public const string Download = "download";
+
     public const string Audio = "audio";
     public const string Transcribe = "transcribe";
     public const string Summary = "summary";
@@ -13,6 +16,7 @@ public static class EngineStage
     /// <summary>Подпись стадии для окна.</summary>
     public static string Describe(string stage) => stage switch
     {
+        Download => "Скачиваю библиотеки для видеокарты",
         Audio => "Готовлю дорожки…",
         Transcribe => "Распознаю речь",
         Summary => "Составляю протокол…",

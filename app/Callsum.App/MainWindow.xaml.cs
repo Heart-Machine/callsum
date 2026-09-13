@@ -157,7 +157,10 @@ public sealed partial class MainWindow : Window
 
     private void ShowProgress(EngineEvent.Progress progress)
     {
-        Stage.Text = progress.Detail is { Length: > 0 } detail && progress.Stage == EngineStage.Transcribe
+        // Подробность уточняет стадию там, где она о чём-то говорит: кого
+        // распознаём сейчас и сколько мегабайт уже скачано.
+        var detailed = progress.Stage is EngineStage.Transcribe or EngineStage.Download;
+        Stage.Text = detailed && progress.Detail is { Length: > 0 } detail
             ? $"{EngineStage.Describe(progress.Stage)}: {detail}"
             : EngineStage.Describe(progress.Stage);
 
