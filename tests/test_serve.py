@@ -239,6 +239,16 @@ def test_doctor_creates_working_folders(cfg):
     assert report["out"] == str(out)
 
 
+def test_doctor_tells_how_to_open_protocols(cfg):
+    """Чем открывать протоколы, знает только ядро: настройка лежит в его config.toml."""
+    cfg.view["markdown_app"] = "code -r {file}"
+
+    events = run(cfg, {"cmd": "doctor", "id": "1"})
+    report = next(e for e in events if e["event"] == "doctor")
+
+    assert report["markdown_app"] == "code -r {file}"
+
+
 def test_mangled_path_hints_at_the_console_encoding(cfg, tmp_path):
     """Кириллица, потерянная при передаче команды, — частая беда PowerShell."""
     events = run(cfg, {"cmd": "process", "id": "1", "path": str(tmp_path / "????????.mkv")})

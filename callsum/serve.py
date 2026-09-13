@@ -204,6 +204,10 @@ class Engine:
             report["model"] = False
             report["ollama_error"] = str(exc)
 
+        # Чем открывать протоколы, решает пользователь в config.toml. Настройки
+        # читает ядро, поэтому приложение узнаёт её отсюда же, вместе с путями.
+        report["markdown_app"] = str(self.cfg.view.get("markdown_app", ""))
+
         # Папки заводим сразу: приложению нужно знать готовые пути, а не
         # разбираться, чего ещё не хватает.
         for key in ("recordings", "out"):
