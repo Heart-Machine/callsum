@@ -214,12 +214,29 @@ public sealed partial class SettingsWindow : Window
         try
         {
             var done = new List<string>();
+            var notes = new List<string>();
             if (changes.Count > 0)
             {
                 var saved = await _engine.SaveSettingsAsync(changes);
                 _loaded = saved;
                 ShowDefaults();
                 done.Add(Describe(changes));
+
+                // Куда писать запись, решает профиль OBS, а не наши настройки.
+                // Без этого человек поменял бы папку в окне, а записи продолжали
+                // бы уходить в старую — и он искал бы их там, где их нет.
+                if (NewRecordingsFolder(changes) is { Length: > 0 } folder)
+                {
+                    var result = await _obs.EnsureRecordFolderAsync(folder);
+                    if (result.Changed)
+                    {
+                        done.Add("папка записи в OBS");
+                    }
+                    else if (result.Note is { Length: > 0 } note)
+                    {
+                        notes.Add(note);
+                    }
+                }
             }
 
             // Устройства уходят в OBS, а не в config.toml: они живут в его
@@ -237,7 +254,8 @@ public sealed partial class SettingsWindow : Window
                 done.Add($"устройство «{input}»");
             }
 
-            Status.Text = $"Сохранено: {string.Join(", ", done)}";
+            Status.Text = $"Сохранено: {string.Join(", ", done)}"
+                          + (notes.Count > 0 ? $". Но {string.Join("; ", notes)}" : "");
         }
         catch (Exception exception) when (exception is EngineException or TimeoutException)
         {
@@ -248,6 +266,13 @@ public sealed partial class SettingsWindow : Window
             Save.IsEnabled = true;
         }
     }
+
+    /// <summary>Новая папка записей, если её меняли в этот раз.</summary>
+    private static string? NewRecordingsFolder(Dictionary<string, Dictionary<string, object?>> changes) =>
+        changes.TryGetValue("paths", out var paths)
+         && paths.TryGetValue("recordings", out var value)
+            ? value as string
+            : null;
 
     /// <summary>Выбранные устройства, если их поменяли.</summary>
     private List<(string Input, ObsDevice Device)> CollectDevices()

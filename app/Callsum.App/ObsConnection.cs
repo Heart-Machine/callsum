@@ -168,6 +168,43 @@ public sealed class ObsConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>Что вышло с папкой записи: поменяли, не понадобилось или не смогли.</summary>
+    public sealed record RecordFolder(bool Changed, string? Note);
+
+    /// <summary>
+    /// Проследить, чтобы OBS писал записи туда, где их ищет программа.
+    ///
+    /// Путь хранится в профиле OBS, а не в настройках callsum: поменяв папку
+    /// в окне, человек иначе получил бы записи в старом месте — ровно это
+    /// и случилось при первой проверке настроек.
+    /// </summary>
+    public async Task<RecordFolder> EnsureRecordFolderAsync(string folder)
+    {
+        var service = _service;
+        if (service is null)
+        {
+            return new RecordFolder(false, "OBS не подключён — папку записи он получит при следующем подключении");
+        }
+
+        try
+        {
+            var change = await service.EnsureRecordFolderAsync(ObsSetup.DefaultProfile, folder)
+                .ConfigureAwait(false);
+            if (change.ForeignProfile is { Length: > 0 } profile)
+            {
+                return new RecordFolder(
+                    false,
+                    $"в OBS открыт профиль «{profile}» — папку записи поменяем, когда он вернётся к callsum");
+            }
+
+            return new RecordFolder(change.Changed, null);
+        }
+        catch (ObsException exception)
+        {
+            return new RecordFolder(false, exception.Message);
+        }
+    }
+
     /// <summary>Выбрать устройство. Возвращает текст ошибки или null.</summary>
     public async Task<string?> SetAudioDeviceAsync(string input, string device)
     {
