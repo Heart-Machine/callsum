@@ -10,6 +10,12 @@ namespace Callsum.Obs.Tests;
 /// </summary>
 public sealed class FakeTransport : IObsTransport
 {
+    /// <summary>
+    /// Выдуманный ответ поддельного OBS. К диску никто не обращается: значение
+    /// только сравнивается в тестах, файла по этому пути не существует.
+    /// </summary>
+    public const string FakeRecording = "R:/записи/созвон.mkv";
+
     private readonly Channel<string> _incoming = Channel.CreateUnbounded<string>();
 
     public FakeTransport(bool authRequired = true, string? failRequest = null)
@@ -54,7 +60,7 @@ public sealed class FakeTransport : IObsTransport
             var status = ok
                 ? "{\"result\": true, \"code\": 100}"
                 : "{\"result\": false, \"code\": 501, \"comment\": \"запись не идёт\"}";
-            var response = ok ? ", \"responseData\": {\"outputPath\": \"D:/созвон.mkv\"}" : "";
+            var response = ok ? $", \"responseData\": {{\"outputPath\": \"{FakeRecording}\"}}" : "";
             Push($"{{\"op\": 7, \"d\": {{\"requestType\": \"{requestType}\", " +
                  $"\"requestId\": \"{requestId}\", \"requestStatus\": {status}{response}}}}}");
         }
