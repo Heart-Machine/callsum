@@ -38,7 +38,23 @@ public abstract record EngineEvent(string? Id)
     public sealed record Failed(string? Id, string Message) : EngineEvent(Id);
 
     /// <summary>Ответ на проверку окружения — как есть, чтобы окно показало его само.</summary>
-    public sealed record Doctor(string? Id, JsonElement Report) : EngineEvent(Id);
+    public sealed record Doctor(string? Id, JsonElement Report) : EngineEvent(Id)
+    {
+        /// <summary>Папка результатов. Пути живут в настройках ядра, поэтому окно
+        /// их спрашивает, а не выводит из своего расположения.</summary>
+        public string? OutFolder => Text("out");
+
+        /// <summary>Папка, куда OBS пишет записи.</summary>
+        public string? RecordingsFolder => Text("recordings");
+
+        /// <summary>Чем пользователь просил открывать протоколы ([view] markdown_app).</summary>
+        public string? MarkdownApp => Text("markdown_app");
+
+        private string? Text(string name) =>
+            Report.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+    }
 
     /// <summary>Событие неизвестного вида: ядро новее приложения — не повод падать.</summary>
     public sealed record Unknown(string Type, JsonElement Data) : EngineEvent((string?)null);

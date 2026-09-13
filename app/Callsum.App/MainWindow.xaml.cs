@@ -1,12 +1,15 @@
+using System.Collections.ObjectModel;
 using Callsum.Core;
 using Callsum.Obs;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Callsum.App;
 
 /// <summary>
-/// Главное окно: одна кнопка на запись, ход обработки и журнал.
+/// Главное окно: одна кнопка на запись, ход обработки, список готовых записей
+/// и журнал.
 ///
 /// Запись ведёт OBS, обработку — ядро в отдельном процессе. Ответы обоих
 /// приходят из чужих потоков, поэтому интерфейс трогается только через
@@ -20,9 +23,13 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherQueue _ui;
     private readonly ObsConnection _obs;
     private readonly DispatcherQueueTimer _clock;
+    private readonly Notifications _notifications;
+    private readonly ObservableCollection<ResultRow> _results = [];
 
     private EngineClient? _engine;
     private DateTimeOffset? _recordingSince;
+    private string? _outFolder;
+    private string? _markdownApp;
     private bool _pending;
     private int _queued;
 
@@ -32,6 +39,11 @@ public sealed partial class MainWindow : Window
         Title = TitleIdle;
 
         _ui = DispatcherQueue.GetForCurrentThread();
+        Results.ItemsSource = _results;
+
+        _notifications = new Notifications(Append);
+        _notifications.Register();
+
         _obs = new ObsConnection(ObsSettings.Load());
         _obs.StateChanged += OnConnectionChanged;
         _obs.RecordStateChanged += OnRecordStateChanged;
@@ -65,6 +77,10 @@ public sealed partial class MainWindow : Window
         {
             await engine.StartAsync().ConfigureAwait(false);
             _engine = engine;
+            // Где лежат записи и результаты, знает ядро — пути записаны в его
+            // настройках. Проверка окружения заодно приносит их, и окно узнаёт,
+            // где искать готовые записи.
+            await engine.DoctorAsync().ConfigureAwait(false);
         }
         catch (EngineException exception)
         {
@@ -102,18 +118,24 @@ public sealed partial class MainWindow : Window
                 Append(log.Text);
                 break;
 
+            case EngineEvent.Doctor doctor:
+                ApplyFolders(doctor);
+                break;
+
             case EngineEvent.Done done:
                 _queued = Math.Max(0, _queued - 1);
                 HideProgress(_queued > 0 ? "Готово, обрабатываю следующий" : "Готово");
                 Append(done.HasSummary
                     ? $"Протокол готов: {done.OutDir}"
                     : $"Расшифровка готова: {done.OutDir}");
+                AddResult(done);
                 break;
 
             case EngineEvent.Failed failed:
                 _queued = Math.Max(0, _queued - 1);
                 HideProgress("Ошибка обработки");
                 Append($"! {failed.Message}");
+                _notifications.Show("Запись не обработана", failed.Message);
                 break;
         }
     }
@@ -142,6 +164,96 @@ public sealed partial class MainWindow : Window
         Progress.Visibility = Visibility.Collapsed;
         Progress.IsIndeterminate = false;
         Stage.Text = stage;
+    }
+
+    // --- список записей ------------------------------------------------
+    private void ApplyFolders(EngineEvent.Doctor doctor)
+    {
+        _outFolder = doctor.OutFolder;
+        _markdownApp = doctor.MarkdownApp;
+        OpenOutFolder.IsEnabled = !string.IsNullOrWhiteSpace(_outFolder);
+        _ = ReloadResultsAsync();
+    }
+
+    private async Task ReloadResultsAsync()
+    {
+        if (_outFolder is not { Length: > 0 } folder)
+        {
+            return;
+        }
+
+        // Перебор папок — работа с диском: на потоке окна он подмораживал бы
+        // кнопку записи, а она должна нажиматься всегда.
+        var found = await Task.Run(() => CallResults.Scan(folder));
+
+        _results.Clear();
+        foreach (var result in found)
+        {
+            _results.Add(new ResultRow(result));
+        }
+
+        UpdateResultsHint();
+    }
+
+    private void AddResult(EngineEvent.Done done)
+    {
+        var result = CallResults.Read(done.OutDir);
+        if (result is null)
+        {
+            return;
+        }
+
+        // Повторная обработка той же записи не должна раздваивать строку:
+        // прежняя убирается, новая встаёт сверху.
+        for (var index = _results.Count - 1; index >= 0; index--)
+        {
+            if (string.Equals(_results[index].Folder, result.Folder, StringComparison.OrdinalIgnoreCase))
+            {
+                _results.RemoveAt(index);
+            }
+        }
+
+        _results.Insert(0, new ResultRow(result));
+        UpdateResultsHint();
+
+        _notifications.Show(result.HasSummary ? "Протокол готов" : "Расшифровка готова", result.Name);
+    }
+
+    private void UpdateResultsHint() =>
+        ResultsHint.Visibility = _results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    private void OnResultClick(object sender, ItemClickEventArgs args)
+    {
+        if (args.ClickedItem is ResultRow row)
+        {
+            // Открывается протокол, а если его нет — расшифровка: нажатие,
+            // которое ничего не делает, выглядит поломкой.
+            Report(Shell.OpenFile(row.Result.MainDocument, _markdownApp));
+        }
+    }
+
+    private void OnOpenFolderClick(object sender, RoutedEventArgs args)
+    {
+        if (sender is FrameworkElement { Tag: string folder })
+        {
+            Report(Shell.OpenFolder(folder));
+        }
+    }
+
+    private void OnOpenOutFolderClick(object sender, RoutedEventArgs args)
+    {
+        if (_outFolder is { Length: > 0 } folder)
+        {
+            Report(Shell.OpenFolder(folder));
+        }
+    }
+
+    private void Report(string? error)
+    {
+        if (error is not null)
+        {
+            Append($"! {error}");
+        }
     }
 
     // --- связь с OBS ---------------------------------------------------
