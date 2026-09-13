@@ -30,6 +30,9 @@ public sealed class FakeTransport : IObsTransport
 
     public List<JsonDocument> Sent { get; } = [];
 
+    /// <summary>Ответы на отдельные запросы: тип запроса — его responseData.</summary>
+    public Dictionary<string, string> Responses { get; } = [];
+
     public bool Closed { get; private set; }
 
     public Task ConnectAsync(Uri uri, CancellationToken cancellationToken)
@@ -60,7 +63,10 @@ public sealed class FakeTransport : IObsTransport
             var status = ok
                 ? "{\"result\": true, \"code\": 100}"
                 : "{\"result\": false, \"code\": 501, \"comment\": \"запись не идёт\"}";
-            var response = ok ? $", \"responseData\": {{\"outputPath\": \"{FakeRecording}\"}}" : "";
+            var payload = requestType is not null && Responses.TryGetValue(requestType, out var custom)
+                ? custom
+                : $"{{\"outputPath\": \"{FakeRecording}\"}}";
+            var response = ok ? $", \"responseData\": {payload}" : "";
             Push($"{{\"op\": 7, \"d\": {{\"requestType\": \"{requestType}\", " +
                  $"\"requestId\": \"{requestId}\", \"requestStatus\": {status}{response}}}}}");
         }

@@ -8,6 +8,9 @@ public sealed record RecordStatus(bool Active, TimeSpan Duration);
 /// <summary>Источник звука в текущей коллекции сцен.</summary>
 public sealed record ObsInput(string Name, string Kind);
 
+/// <summary>Устройство записи звука: как его зовут в Windows и как его зовёт OBS.</summary>
+public sealed record ObsDevice(string Name, string Value);
+
 /// <summary>
 /// Операции с OBS, нужные для записи созвонов. Поверх клиента протокола, чтобы
 /// приложение работало с понятиями «начать запись», «переключить профиль»,
@@ -189,6 +192,83 @@ public sealed class ObsService
                 inputKind = kind,
                 inputSettings = new { device_id = "default" },
                 sceneItemEnabled = true,
+            },
+            cancellationToken);
+
+    /// <summary>Настройка источника звука, в которой записано выбранное устройство.</summary>
+    public const string DeviceProperty = "device_id";
+
+    /// <summary>
+    /// Устройства, между которыми можно выбирать для этого источника.
+    ///
+    /// Список даёт сам OBS: он перечисляет устройства Windows так же, как
+    /// в окне свойств источника, вместе со значением «по умолчанию».
+    /// </summary>
+    public async Task<IReadOnlyList<ObsDevice>> GetInputDevicesAsync(
+        string inputName, CancellationToken cancellationToken = default)
+    {
+        var data = await _client.RequestAsync(
+            "GetInputPropertiesListPropertyItems",
+            new { inputName, propertyName = DeviceProperty },
+            cancellationToken).ConfigureAwait(false);
+
+        var devices = new List<ObsDevice>();
+        if (!data.TryGetProperty("propertyItems", out var items) || items.ValueKind != JsonValueKind.Array)
+        {
+            return devices;
+        }
+
+        foreach (var item in items.EnumerateArray())
+        {
+            // Недоступное устройство (отключённая гарнитура) OBS показывает,
+            // но выбирать его нечего: запись вышла бы пустой.
+            if (item.TryGetProperty("itemEnabled", out var enabled)
+                && enabled.ValueKind == JsonValueKind.False)
+            {
+                continue;
+            }
+
+            var value = item.TryGetProperty("itemValue", out var raw) && raw.ValueKind == JsonValueKind.String
+                ? raw.GetString() ?? ""
+                : "";
+            var name = item.TryGetProperty("itemName", out var title) ? title.GetString() ?? "" : "";
+            if (value.Length > 0)
+            {
+                devices.Add(new ObsDevice(name.Length > 0 ? name : value, value));
+            }
+        }
+
+        return devices;
+    }
+
+    /// <summary>Какое устройство выбрано у источника сейчас.</summary>
+    public async Task<string> GetInputDeviceAsync(
+        string inputName, CancellationToken cancellationToken = default)
+    {
+        var data = await _client.RequestAsync(
+            "GetInputSettings", new { inputName }, cancellationToken).ConfigureAwait(false);
+
+        // Пустые настройки означают устройство по умолчанию: OBS не пишет
+        // в файл то, что и так является значением по умолчанию.
+        return data.TryGetProperty("inputSettings", out var settings)
+            && settings.ValueKind == JsonValueKind.Object
+            && settings.TryGetProperty(DeviceProperty, out var device)
+            && device.ValueKind == JsonValueKind.String
+                ? device.GetString() ?? "default"
+                : "default";
+    }
+
+    /// <summary>Выбрать устройство источнику.</summary>
+    public Task SetInputDeviceAsync(
+        string inputName, string device, CancellationToken cancellationToken = default) =>
+        _client.RequestAsync(
+            "SetInputSettings",
+            new
+            {
+                inputName,
+                inputSettings = new Dictionary<string, object?> { [DeviceProperty] = device },
+                // Остальные настройки источника остаются как были.
+                overlay = true,
             },
             cancellationToken);
 

@@ -90,6 +90,38 @@
                         Text="Синтаксис OBS: %CCYY год, %MM месяц, %DD день, %hh часы, %mm минуты, %ss секунды. Применится при следующей настройке профиля OBS." />
                 </StackPanel>
 
+                <TextBlock Text="Звук" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Микрофон — дорожка «Я»" />
+                    <ComboBox
+                        x:Name="MicrophoneDevice"
+                        HorizontalAlignment="Stretch"
+                        DisplayMemberPath="Name"
+                        IsEnabled="False" />
+                    <TextBlock
+                        x:Name="MicrophoneHint"
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="Спрашиваю у OBS…" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Звук системы — дорожка «Собеседник»" />
+                    <ComboBox
+                        x:Name="SystemDevice"
+                        HorizontalAlignment="Stretch"
+                        DisplayMemberPath="Name"
+                        IsEnabled="False" />
+                    <TextBlock
+                        x:Name="SystemHint"
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="Спрашиваю у OBS…" />
+                </StackPanel>
+
                 <TextBlock Text="Распознавание" FontWeight="SemiBold" />
 
                 <StackPanel Spacing="4">
