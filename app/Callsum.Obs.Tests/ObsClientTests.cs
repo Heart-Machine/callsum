@@ -67,7 +67,7 @@ public class ObsClientTests
 
         var data = await client.RequestAsync("StopRecord");
 
-        Assert.Equal("D:/созвон.mkv", data.GetProperty("outputPath").GetString());
+        Assert.Equal(FakeTransport.FakeRecording, data.GetProperty("outputPath").GetString());
     }
 
     [Fact]
@@ -94,11 +94,11 @@ public class ObsClientTests
 
         transport.PushEvent(
             "RecordStateChanged",
-            "{\"outputState\": \"OBS_WEBSOCKET_OUTPUT_STOPPED\", \"outputPath\": \"D:/созвон.mkv\"}");
+            $"{{\"outputState\": \"OBS_WEBSOCKET_OUTPUT_STOPPED\", \"outputPath\": \"{FakeTransport.FakeRecording}\"}}");
 
         var obsEvent = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("RecordStateChanged", obsEvent.Type);
-        Assert.Equal("D:/созвон.mkv", obsEvent.Data.GetProperty("outputPath").GetString());
+        Assert.Equal(FakeTransport.FakeRecording, obsEvent.Data.GetProperty("outputPath").GetString());
     }
 
     [Fact]
