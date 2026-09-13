@@ -104,12 +104,22 @@
                                             FontSize="12" />
                                     </StackPanel>
 
-                                    <Button
+                                    <StackPanel
                                         Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        Content="Папка"
-                                        Tag="{x:Bind Folder}"
-                                        Click="OnOpenFolderClick" />
+                                        Orientation="Horizontal"
+                                        Spacing="6"
+                                        VerticalAlignment="Center">
+                                        <!-- Пересобрать протокол: после сбоя обработки
+                                             и когда поменялся шаблон протокола. -->
+                                        <Button
+                                            Content="Заново"
+                                            Tag="{x:Bind}"
+                                            Click="OnReprocessClick" />
+                                        <Button
+                                            Content="Папка"
+                                            Tag="{x:Bind Folder}"
+                                            Click="OnOpenFolderClick" />
+                                    </StackPanel>
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>
