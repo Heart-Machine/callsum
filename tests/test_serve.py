@@ -60,8 +60,8 @@ def test_broken_json_does_not_break_the_loop(cfg):
     assert any(e["event"] == "error" and "разобрал" in e["message"] for e in events)
 
 
-def test_missing_recording_is_an_error(cfg):
-    events = run(cfg, {"cmd": "process", "id": "7", "path": "D:/нет-такого.mkv"})
+def test_missing_recording_is_an_error(cfg, tmp_path):
+    events = run(cfg, {"cmd": "process", "id": "7", "path": str(tmp_path / "нет-такого.mkv")})
     error = next(e for e in events if e["event"] == "error")
     assert error["id"] == "7"
     assert "Нет файла" in error["message"]
@@ -239,14 +239,14 @@ def test_doctor_creates_working_folders(cfg):
     assert report["out"] == str(out)
 
 
-def test_mangled_path_hints_at_the_console_encoding(cfg):
+def test_mangled_path_hints_at_the_console_encoding(cfg, tmp_path):
     """Кириллица, потерянная при передаче команды, — частая беда PowerShell."""
-    events = run(cfg, {"cmd": "process", "id": "1", "path": "D:/записи/????????.mkv"})
+    events = run(cfg, {"cmd": "process", "id": "1", "path": str(tmp_path / "????????.mkv")})
     error = next(e for e in events if e["event"] == "error")
     assert "OutputEncoding" in error["message"]
 
 
-def test_plain_missing_file_has_no_extra_advice(cfg):
-    events = run(cfg, {"cmd": "process", "id": "1", "path": "D:/records/absent.mkv"})
+def test_plain_missing_file_has_no_extra_advice(cfg, tmp_path):
+    events = run(cfg, {"cmd": "process", "id": "1", "path": str(tmp_path / "absent.mkv")})
     error = next(e for e in events if e["event"] == "error")
     assert "OutputEncoding" not in error["message"]
