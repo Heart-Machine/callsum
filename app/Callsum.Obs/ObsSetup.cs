@@ -14,11 +14,17 @@ public sealed class ObsSetup
 {
     public const string DefaultProfile = "callsum";
 
+    /// <summary>Имя источника, который пишет микрофон — первую дорожку.</summary>
+    public const string MicrophoneInput = "Микрофон";
+
+    /// <summary>Имя источника, который пишет всё, что играет в колонках, — вторую дорожку.</summary>
+    public const string SystemAudioInput = "Звук системы";
+
     /// <summary>Микрофон — дорожка 1, всё, что играет в колонках, — дорожка 2.</summary>
     private static readonly (string Kind, string DefaultName, int Track)[] AudioSources =
     [
-        ("wasapi_input_capture", "Микрофон", 1),
-        ("wasapi_output_capture", "Звук системы", 2),
+        ("wasapi_input_capture", MicrophoneInput, 1),
+        ("wasapi_output_capture", SystemAudioInput, 2),
     ];
 
     /// <summary>

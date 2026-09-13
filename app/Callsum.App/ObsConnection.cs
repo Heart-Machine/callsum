@@ -134,6 +134,60 @@ public sealed class ObsConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>Что можно выбрать для одного источника звука и что выбрано сейчас.</summary>
+    public sealed record AudioChoice(
+        string Input, IReadOnlyList<ObsDevice> Devices, string Current, string? Error);
+
+    /// <summary>
+    /// Устройства записи: список даёт сам OBS, как в окне свойств источника.
+    ///
+    /// Источники живут в коллекции сцен callsum. Если в OBS открыта другая
+    /// коллекция, их там нет — об этом честно говорится, а не переключается
+    /// втихую: переключение меняет то, что человек видит в OBS прямо сейчас.
+    /// </summary>
+    public async Task<AudioChoice> GetAudioChoiceAsync(string input)
+    {
+        var service = _service;
+        if (service is null)
+        {
+            return new AudioChoice(input, [], "", "Нет подключения к OBS");
+        }
+
+        try
+        {
+            var devices = await service.GetInputDevicesAsync(input).ConfigureAwait(false);
+            var current = await service.GetInputDeviceAsync(input).ConfigureAwait(false);
+            return new AudioChoice(input, devices, current, null);
+        }
+        catch (ObsException exception)
+        {
+            var collection = exception.Message.Contains("не найден", StringComparison.OrdinalIgnoreCase)
+                ? $"В OBS нет источника «{input}». Откройте коллекцию сцен callsum или создайте её заново."
+                : exception.Message;
+            return new AudioChoice(input, [], "", collection);
+        }
+    }
+
+    /// <summary>Выбрать устройство. Возвращает текст ошибки или null.</summary>
+    public async Task<string?> SetAudioDeviceAsync(string input, string device)
+    {
+        var service = _service;
+        if (service is null)
+        {
+            return "Нет подключения к OBS";
+        }
+
+        try
+        {
+            await service.SetInputDeviceAsync(input, device).ConfigureAwait(false);
+            return null;
+        }
+        catch (ObsException exception)
+        {
+            return exception.Message;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         _lifetime.Cancel();

@@ -1,4 +1,5 @@
 using Callsum.Core;
+using Callsum.Obs;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -20,16 +21,20 @@ public sealed partial class SettingsWindow : Window
     private sealed record Field(string Section, string Key, string Label, bool Required = true);
 
     private readonly EngineClient _engine;
+    private readonly ObsConnection _obs;
     private readonly DispatcherQueue _ui;
     private readonly Dictionary<TextBox, Field> _fields = [];
 
     private EngineEvent.Settings? _loaded;
+    private string _microphone = "";
+    private string _systemAudio = "";
 
-    public SettingsWindow(EngineClient engine)
+    public SettingsWindow(EngineClient engine, ObsConnection obs)
     {
         InitializeComponent();
         Title = "callsum — Настройки";
         _engine = engine;
+        _obs = obs;
         _ui = DispatcherQueue.GetForCurrentThread();
 
         AppWindow.Resize(new SizeInt32(620, 900));
@@ -47,6 +52,51 @@ public sealed partial class SettingsWindow : Window
         _fields[MarkdownApp] = new("view", "markdown_app", "Чем открывать", Required: false);
 
         _ = LoadAsync();
+        _ = LoadDevicesAsync();
+    }
+
+    /// <summary>
+    /// Спросить у OBS, между какими устройствами можно выбирать.
+    ///
+    /// Это отдельная от настроек ядра история: устройства записи живут не
+    /// в config.toml, а в коллекции сцен OBS — там же, где сами источники.
+    /// </summary>
+    private async Task LoadDevicesAsync()
+    {
+        await ShowDevicesAsync(ObsSetup.MicrophoneInput, MicrophoneDevice, MicrophoneHint);
+        await ShowDevicesAsync(ObsSetup.SystemAudioInput, SystemDevice, SystemHint);
+    }
+
+    private async Task ShowDevicesAsync(string input, ComboBox box, TextBlock hint)
+    {
+        var choice = await _obs.GetAudioChoiceAsync(input);
+        _ui.TryEnqueue(() =>
+        {
+            if (choice.Error is { Length: > 0 } error)
+            {
+                hint.Text = error;
+                return;
+            }
+
+            box.ItemsSource = choice.Devices;
+            box.SelectedItem = choice.Devices.FirstOrDefault(
+                device => device.Value == choice.Current);
+            box.IsEnabled = true;
+            hint.Text = box.SelectedItem is null && choice.Current.Length > 0
+                // Выбранного устройства нет в списке — обычно это отключённая
+                // гарнитура: запись с неё будет пустой, и лучше сказать сразу.
+                ? "Выбранное устройство сейчас недоступно — похоже, оно отключено"
+                : "";
+
+            if (input == ObsSetup.MicrophoneInput)
+            {
+                _microphone = choice.Current;
+            }
+            else
+            {
+                _systemAudio = choice.Current;
+            }
+        });
     }
 
     private async Task LoadAsync()
@@ -144,7 +194,8 @@ public sealed partial class SettingsWindow : Window
         }
 
         var changes = Collect(settings);
-        if (changes.Count == 0)
+        var devices = CollectDevices();
+        if (changes.Count == 0 && devices.Count == 0)
         {
             Status.Text = "Менять нечего";
             return;
@@ -154,10 +205,31 @@ public sealed partial class SettingsWindow : Window
         Status.Text = "Сохраняю…";
         try
         {
-            var saved = await _engine.SaveSettingsAsync(changes);
-            _loaded = saved;
-            ShowResolved();
-            Status.Text = $"Сохранено: {Describe(changes)}";
+            var done = new List<string>();
+            if (changes.Count > 0)
+            {
+                var saved = await _engine.SaveSettingsAsync(changes);
+                _loaded = saved;
+                ShowResolved();
+                done.Add(Describe(changes));
+            }
+
+            // Устройства уходят в OBS, а не в config.toml: они живут в его
+            // коллекции сцен вместе с источниками.
+            foreach (var (input, device) in devices)
+            {
+                var error = await _obs.SetAudioDeviceAsync(input, device.Value);
+                if (error is not null)
+                {
+                    Status.Text = error;
+                    return;
+                }
+
+                Remember(input, device.Value);
+                done.Add($"устройство «{input}»");
+            }
+
+            Status.Text = $"Сохранено: {string.Join(", ", done)}";
         }
         catch (Exception exception) when (exception is EngineException or TimeoutException)
         {
@@ -166,6 +238,35 @@ public sealed partial class SettingsWindow : Window
         finally
         {
             Save.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Выбранные устройства, если их поменяли.</summary>
+    private List<(string Input, ObsDevice Device)> CollectDevices()
+    {
+        var changed = new List<(string, ObsDevice)>();
+        if (MicrophoneDevice.SelectedItem is ObsDevice microphone && microphone.Value != _microphone)
+        {
+            changed.Add((ObsSetup.MicrophoneInput, microphone));
+        }
+
+        if (SystemDevice.SelectedItem is ObsDevice system && system.Value != _systemAudio)
+        {
+            changed.Add((ObsSetup.SystemAudioInput, system));
+        }
+
+        return changed;
+    }
+
+    private void Remember(string input, string device)
+    {
+        if (input == ObsSetup.MicrophoneInput)
+        {
+            _microphone = device;
+        }
+        else
+        {
+            _systemAudio = device;
         }
     }
 
