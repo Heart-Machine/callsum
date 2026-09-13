@@ -32,6 +32,7 @@ public sealed partial class MainWindow : Window
     private string? _outFolder;
     private string? _markdownApp;
     private string? _recordingsFolder;
+    private string? _recordFolderNote;
     private bool _pending;
     private int _queued;
 
@@ -121,11 +122,14 @@ public sealed partial class MainWindow : Window
                 break;
 
             case EngineEvent.Doctor doctor:
-                ApplyFolders(
-                    doctor.OutFolder, doctor.RecordingsFolder, doctor.MarkdownApp);
+                // Проверка окружения — первое, что окно спрашивает у ядра:
+                // здесь и выясняется, что OBS пишет не туда, где ищет программа.
+                ApplyFolders(doctor.OutFolder, doctor.RecordingsFolder, doctor.MarkdownApp);
+                _ = SyncRecordFolderAsync();
                 break;
 
             // Настройки могли поменять папки прямо сейчас — в окне настроек.
+            // Папку записи в OBS задаёт оно же и само о ней отчитывается.
             case EngineEvent.Settings settings:
                 ApplyFolders(
                     settings.ResolvedPath("out"),
@@ -189,6 +193,33 @@ public sealed partial class MainWindow : Window
         if (moved)
         {
             _ = ReloadResultsAsync();
+        }
+    }
+
+    /// <summary>
+    /// Проследить, чтобы OBS писал записи туда, где их ищет ядро.
+    ///
+    /// Папку записи хранит профиль OBS, а папку для поиска — настройки callsum.
+    /// Разъехавшись, они дают самое неприятное: в настройках одно, на диске
+    /// другое, и человек ищет запись там, где её нет.
+    /// </summary>
+    private async Task SyncRecordFolderAsync()
+    {
+        if (_recordingsFolder is not { Length: > 0 } folder || !_obs.Connected)
+        {
+            return;
+        }
+
+        var result = await _obs.EnsureRecordFolderAsync(folder);
+        if (result.Changed)
+        {
+            Append($"OBS теперь пишет записи в {folder}");
+        }
+        else if (result.Note is { Length: > 0 } note && note != _recordFolderNote)
+        {
+            // Одно и то же замечание на каждое переподключение — шум в журнале.
+            _recordFolderNote = note;
+            Append($"! Папка записи: {note}");
         }
     }
 
@@ -324,6 +355,13 @@ public sealed partial class MainWindow : Window
     {
         ObsStatus.Text = connected ? $"OBS: подключён ({description})" : $"OBS: {description}";
         RecordButton.IsEnabled = connected && !_pending;
+        if (connected)
+        {
+            // OBS мог запуститься позже приложения — папку записи он должен
+            // получить и в этом случае, а не только при чтении настроек.
+            _ = SyncRecordFolderAsync();
+        }
+
         if (!connected)
         {
             // Кто сейчас ведёт запись, приложение не знает — таймер врал бы.

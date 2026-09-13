@@ -139,6 +139,47 @@ public sealed class ObsService
     public Task SetRecordDirectoryAsync(string folder, CancellationToken cancellationToken = default) =>
         _client.RequestAsync("SetRecordDirectory", new { recordDirectory = folder }, cancellationToken);
 
+    /// <summary>
+    /// Что стало с папкой записи.
+    /// </summary>
+    /// <param name="Changed">Папку пришлось поменять — раньше OBS писал в другое место.</param>
+    /// <param name="ForeignProfile">Имя чужого профиля, если открыт не наш: тогда ничего не трогаем.</param>
+    public sealed record RecordFolderChange(bool Changed, string? ForeignProfile = null);
+
+    /// <summary>
+    /// Проследить, чтобы OBS писал записи туда же, где их ищет программа.
+    ///
+    /// Куда писать, решает OBS: путь хранится в его профиле, а не в настройках
+    /// callsum. Пока обе стороны настраивает `obs-setup` из одного файла, они
+    /// совпадают, но стоит поменять папку в окне — разъезжаются, и записи
+    /// уходят в старое место при новых настройках.
+    ///
+    /// Чужой профиль не трогаем: настройки пользователя, которыми он
+    /// пользуется для всего остального, — не наше дело.
+    /// </summary>
+    public async Task<RecordFolderChange> EnsureRecordFolderAsync(
+        string profile, string folder, CancellationToken cancellationToken = default)
+    {
+        var (current, _) = await GetProfilesAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(current, profile, StringComparison.OrdinalIgnoreCase))
+        {
+            return new RecordFolderChange(false, current);
+        }
+
+        var now = await GetRecordDirectoryAsync(cancellationToken).ConfigureAwait(false);
+        if (string.Equals(Normalize(now), Normalize(folder), StringComparison.OrdinalIgnoreCase))
+        {
+            return new RecordFolderChange(false);
+        }
+
+        await SetRecordDirectoryAsync(folder, cancellationToken).ConfigureAwait(false);
+        return new RecordFolderChange(true);
+    }
+
+    /// <summary>Пути сравниваются без учёта завершающего слеша и вида слешей.</summary>
+    private static string Normalize(string? path) =>
+        (path ?? "").Replace('/', '\\').TrimEnd('\\');
+
     public Task SetVideoSettingsAsync(int fps, int width, int height, CancellationToken cancellationToken = default) =>
         _client.RequestAsync(
             "SetVideoSettings",
