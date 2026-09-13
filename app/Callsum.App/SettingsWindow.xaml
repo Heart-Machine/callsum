@@ -23,7 +23,8 @@
             IsTextSelectionEnabled="True"
             Text="Читаю настройки…" />
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <!-- Отступ справа: полоса прокрутки иначе ложится поверх кнопок «Обзор…». -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
             <!-- Форма выключена, пока настройки не прочитаны: править нечего. -->
             <ContentControl
                 x:Name="Form"
@@ -35,7 +36,7 @@
                 <TextBlock Text="Папки" FontWeight="SemiBold" />
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Записи созвонов" />
+                    <TextBlock Text="Записи" />
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

@@ -244,6 +244,12 @@ class Engine:
             # Относительный путь в файле — обычное дело; окну нужно показать,
             # где файлы окажутся на самом деле.
             "resolved": {key: str(self.cfg.path(key)) for key in ("recordings", "out")},
+            # Куда программа сложила бы всё сама: окно показывает это подсказкой,
+            # чтобы человек видел, от чего он отказывается, выбирая свою папку.
+            "defaults": {
+                key: str(config.data_dir() / config.DEFAULTS["paths"][key])
+                for key in ("recordings", "out")
+            },
         }
 
     def _release_transcriber(self) -> None:

@@ -28,9 +28,37 @@ def test_config_is_created_from_example(tmp_path):
     target = tmp_path / "config.toml"
 
     assert config.ensure_config(target) is not None
-    assert target.read_text(encoding="utf-8") == (
-        (tmp_path / config.EXAMPLE_NAME).read_text(encoding="utf-8")
-    )
+
+    created = target.read_text(encoding="utf-8")
+    example = (tmp_path / config.EXAMPLE_NAME).read_text(encoding="utf-8")
+    # Отличаться должны только пути: остальное — тот же файл с комментариями.
+    assert _without_paths(created) == _without_paths(example)
+    assert created.count("#") == example.count("#")
+
+
+def _without_paths(text: str) -> list[str]:
+    return [
+        line for line in text.splitlines()
+        if not line.startswith(("recordings =", "out ="))
+    ]
+
+
+def test_created_config_holds_full_paths(tmp_path, monkeypatch):
+    """Относительный путь в личном файле только сбивает с толку.
+
+    «out» ничего не говорит о том, где искать протоколы, и зависит от того,
+    откуда запущена программа. В примере пути относительные — иначе он был бы
+    привязан к одной машине, — а в созданном файле разворачиваются в полные.
+    """
+    _installed(tmp_path, monkeypatch)
+    target = tmp_path / "config.toml"
+
+    config.ensure_config(target)
+
+    paths = tomllib.loads(target.read_text(encoding="utf-8"))["paths"]
+    assert Path(paths["recordings"]).is_absolute()
+    assert Path(paths["out"]).is_absolute()
+    assert Path(paths["out"]).name == "out"
 
 
 def test_existing_config_is_never_overwritten(tmp_path):
@@ -51,10 +79,10 @@ def test_missing_example_is_not_an_error(tmp_path, monkeypatch):
 
 
 def test_example_is_taken_from_the_bundle_when_missing_next_to_config(tmp_path):
-    """В собранном ядре пример лежит внутри сборки, а config.toml — рядом с exe."""
+    """В собранном ядре пример лежит внутри сборки, а config.toml — в профиле."""
     target = tmp_path / "config.toml"
     assert config.ensure_config(target) is not None
-    assert target.read_text(encoding="utf-8") == (
+    assert _without_paths(target.read_text(encoding="utf-8")) == _without_paths(
         (config.RESOURCES / config.EXAMPLE_NAME).read_text(encoding="utf-8")
     )
 
@@ -112,7 +140,7 @@ def test_example_is_used_when_there_is_nothing_to_take_along(tmp_path, monkeypat
 
     target = config.config_path()
     assert config.ensure_config(target) is not None
-    assert target.read_text(encoding="utf-8") == (
+    assert _without_paths(target.read_text(encoding="utf-8")) == _without_paths(
         (config.RESOURCES / config.EXAMPLE_NAME).read_text(encoding="utf-8")
     )
 
