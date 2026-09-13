@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Callsum.Obs\Callsum.Obs.csproj" />
+    <ProjectReference Include="..\Callsum.Core\Callsum.Core.csproj" />
   </ItemGroup>
 
 </Project>

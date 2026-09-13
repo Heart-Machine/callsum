@@ -43,11 +43,19 @@
             FontFamily="Consolas"
             Text="00:00:00" />
 
-        <TextBlock
-            x:Name="Stage"
-            Grid.Row="3"
-            HorizontalAlignment="Center"
-            Text="Готов к записи" />
+        <StackPanel Grid.Row="3" Spacing="6">
+            <TextBlock
+                x:Name="Stage"
+                HorizontalAlignment="Center"
+                Text="Готов к записи" />
+
+            <!-- Полоса прячется, когда обработки нет: пустая шкала сбивает с толку. -->
+            <ProgressBar
+                x:Name="Progress"
+                Visibility="Collapsed"
+                Minimum="0"
+                Maximum="1" />
+        </StackPanel>
 
         <Border
             Grid.Row="4"

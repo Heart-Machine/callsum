@@ -28,7 +28,7 @@ import queue
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Iterator
 
 from . import __version__, audio, naming, summarize
 from .pipeline import process
@@ -228,6 +228,36 @@ class Engine:
         return self._transcriber
 
 
+def _preload() -> None:
+    """Подтянуть тяжёлые модули в главном потоке, до старта рабочего.
+
+    В собранном ядре импорт faster-whisper из рабочего потока намертво вешает
+    загрузчик библиотек Windows: поток застревает на загрузке numpy и ждёт
+    блокировку, которую никто не отпустит. Из консоли этого не видно, а под
+    управлением приложения ядро замирало после первой же команды. Импорт
+    заранее снимает проблему и заодно делает честным сообщение «ядро готово».
+    """
+    try:
+        import faster_whisper  # noqa: F401
+    except Exception:  # noqa: BLE001 — без распознавания остальные команды работают
+        pass
+
+
+def _stdin_lines() -> Iterator[str]:
+    """Читать команды построчно, а не пачками.
+
+    Обход `for line in sys.stdin` намеренный: такое чтение буферизуется блоками,
+    и одиночная команда от приложения застревает в буфере до тех пор, пока не
+    наберётся восемь килобайт или не закроется поток. Из консоли это незаметно —
+    поток закрывается сразу, — а живое приложение зависало, отправив команду.
+    """
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return
+        yield line
+
+
 def serve(cfg, lines: Iterable[str] | None = None, write: Callable[[str], None] | None = None) -> int:
     """Цикл чтения команд. Завершается по команде shutdown или концу потока."""
     stream = sys.stdout
@@ -253,6 +283,7 @@ def serve(cfg, lines: Iterable[str] | None = None, write: Callable[[str], None] 
     device, compute_type = Transcriber._resolve_device(
         cfg.transcribe["device"], cfg.transcribe["compute_type"]
     )
+    _preload()
     engine = Engine(cfg, emit)
     engine.start()
     emit({
@@ -263,7 +294,7 @@ def serve(cfg, lines: Iterable[str] | None = None, write: Callable[[str], None] 
     })
 
     try:
-        for line in (sys.stdin if lines is None else lines):
+        for line in (_stdin_lines() if lines is None else lines):
             # PowerShell дописывает в начало потока метку кодировки (BOM), да и
             # вообще первый символ строки может оказаться служебным — JSON от
             # этого не разбирается, поэтому отрезаем.
