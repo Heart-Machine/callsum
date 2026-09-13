@@ -107,7 +107,8 @@ def test_processing_reports_progress_and_result(cfg, tmp_path, monkeypatch):
         return FakeResult(out_dir)
 
     monkeypatch.setattr(serve_module, "process", fake_process)
-    monkeypatch.setattr(serve_module.Engine, "_ensure_transcriber", lambda self: None)
+    monkeypatch.setattr(
+        serve_module.Engine, "_ensure_transcriber", lambda self, request_id=None: None)
 
     events = run(cfg, {"cmd": "process", "id": "9", "path": str(source)})
     kinds = [e["event"] for e in events]

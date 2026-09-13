@@ -17,12 +17,26 @@ def _register_cuda_dlls() -> None:
     if os.name != "nt":
         return
     if getattr(sys, "frozen", False):
-        # В собранном ядре библиотеки лежат рядом с исполняемым файлом.
-        for folder in (Path(sys.executable).parent, Path(__file__).resolve().parent.parent):
+        from . import cuda
+
+        # В собранном ядре библиотеки лежат либо рядом с исполняемым файлом
+        # (старые сборки везли их с собой), либо в папке, куда программа
+        # скачала их при первом запуске.
+        for folder in (
+            cuda.target_dir(),
+            Path(sys.executable).parent,
+            Path(__file__).resolve().parent.parent,
+        ):
             try:
                 os.add_dll_directory(str(folder))
             except OSError:
                 pass
+            # Одного add_dll_directory мало: CTranslate2 грузит cublas64_12.dll
+            # сам, обычным LoadLibrary, а тот смотрит в PATH и не знает про
+            # добавленные каталоги. Пока библиотеки лежали рядом с ядром, это
+            # было незаметно — папку программы Windows ищет всегда.
+            if folder.is_dir():
+                os.environ["PATH"] = str(folder) + os.pathsep + os.environ.get("PATH", "")
         return
     for site in sys.path:
         nvidia = Path(site) / "nvidia"
@@ -36,6 +50,25 @@ def _register_cuda_dlls() -> None:
             os.environ["PATH"] = str(dll_dir) + os.pathsep + os.environ.get("PATH", "")
 
 
+def _ensure_cuda(log, on_progress=None) -> None:
+    """Донести библиотеки CUDA, если их ещё нет.
+
+    Только в собранном приложении: при запуске из исходников они приезжают
+    вместе с пакетами `nvidia-*-cu12` из requirements.txt.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+
+    from . import cuda
+
+    try:
+        cuda.ensure(on_progress=on_progress, log=log)
+    except cuda.CudaError as exc:
+        # Без библиотек остаётся процессор: медленно, но работает, и это
+        # честнее, чем падение посреди созвона.
+        log(f"{exc} Пока распознаю на процессоре.")
+
+
 @dataclass
 class Segment:
     start: float
@@ -47,14 +80,19 @@ class Segment:
 class Transcriber:
     """Обёртка над моделью Whisper: грузится один раз, работает по всем дорожкам."""
 
-    def __init__(self, cfg, verbose: bool = True):
-        _register_cuda_dlls()
-        from faster_whisper import WhisperModel  # импорт после настройки DLL
-
+    def __init__(self, cfg, verbose: bool = True, on_progress=None):
         self.cfg = cfg
         self.verbose = verbose
         tr = cfg.transcribe
         device, compute = self._resolve_device(tr["device"], tr["compute_type"])
+        if device == "cuda":
+            # Установщик лёгкий: библиотеки CUDA программа доносит сама, при
+            # первом распознавании. Дальше они лежат и переживают обновления.
+            _ensure_cuda(self._log, on_progress)
+
+        _register_cuda_dlls()
+        from faster_whisper import WhisperModel  # импорт после настройки DLL
+
         kwargs = {"device": device, "compute_type": compute}
         if tr.get("model_dir"):
             kwargs["download_root"] = tr["model_dir"]

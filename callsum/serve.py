@@ -33,7 +33,7 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-from . import __version__, audio, config, naming, settings, summarize
+from . import __version__, audio, config, cuda, naming, settings, summarize
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -137,7 +137,7 @@ class Engine:
         res = process(
             src,
             self.cfg,
-            transcriber=self._ensure_transcriber(),
+            transcriber=self._ensure_transcriber(request_id),
             log=lambda text: self.emit({"event": "log", "id": request_id, "text": str(text)}),
             on_stage=lambda stage, fraction, detail: self.emit({
                 "event": "progress",
@@ -276,6 +276,9 @@ class Engine:
         )
         report["device"] = device
         report["compute_type"] = compute_type
+        # Библиотеки CUDA приложение доносит само: окну полезно знать, ждать ли
+        # при первом распознавании долгую скачку.
+        report["cuda_ready"] = not cuda.missing() if getattr(sys, "frozen", False) else True
 
         host = self.cfg.summary["host"]
         wanted = str(self.cfg.summary["model"])
@@ -306,10 +309,22 @@ class Engine:
 
         self.emit(report)
 
-    def _ensure_transcriber(self) -> Transcriber:
+    def _ensure_transcriber(self, request_id: Any = None) -> Transcriber:
         if self._transcriber is None:
             self.emit({"event": "log", "text": "Загружаю модель распознавания…"})
-            self._transcriber = Transcriber(self.cfg, verbose=False)
+            self._transcriber = Transcriber(
+                self.cfg,
+                verbose=False,
+                # Библиотеки CUDA качаются при первом распознавании: около
+                # гигабайта, и молчать эти минуты нельзя.
+                on_progress=lambda fraction, detail: self.emit({
+                    "event": "progress",
+                    "id": request_id,
+                    "stage": "download",
+                    "fraction": fraction,
+                    "detail": detail,
+                }),
+            )
             self.emit({
                 "event": "log",
                 "text": f"Модель загружена ({self._transcriber.device}/"

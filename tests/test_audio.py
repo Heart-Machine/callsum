@@ -133,4 +133,14 @@ def test_stalled_process_does_not_survive_the_watchdog(tmp_path):
     with pytest.raises(audio.FFmpegStalled):
         audio._supervise(python(code), what="проверка", stall_seconds=1.0)
 
-    busy.unlink()
+    # Освобождение файла отстаёт от завершения процесса: после kill за него
+    # ещё может держаться антивирус. Живой процесс держал бы файл вечно,
+    # поэтому ждём недолго — и всё равно проверяем, что он отпустил.
+    for _ in range(50):
+        try:
+            busy.unlink()
+            return
+        except PermissionError:
+            time.sleep(0.1)
+
+    pytest.fail("файл всё ещё занят — процесс пережил сторожа")
