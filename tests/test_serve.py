@@ -365,3 +365,17 @@ def test_changed_model_drops_the_loaded_one(cfg, tmp_path, monkeypatch):
 
     assert released == ["да"]
     assert engine._transcriber is None
+
+
+def test_settings_report_tells_the_default_folders(cfg, tmp_path):
+    """Окно показывает подсказкой, куда программа сложила бы всё сама."""
+    cfg.source = tmp_path / "config.toml"
+
+    events = run(cfg, {"cmd": "settings", "id": "1"})
+    report = next(e for e in events if e["event"] == "settings")
+
+    from pathlib import Path as _Path
+
+    for key in ("recordings", "out"):
+        assert _Path(report["defaults"][key]).is_absolute()
+        assert report["defaults"][key].endswith(key)

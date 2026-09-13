@@ -10,7 +10,9 @@ public class SettingsExchangeTests
      "values": {"paths": {"out": "out", "folder_template": "{name}"},
                 "summary": {"model": "qwen3:14b", "num_ctx": 8192, "enabled": true},
                 "transcribe": {"vad": false}},
-     "resolved": {"recordings": "D:/rec", "out": "D:/out"}}
+     "resolved": {"recordings": "D:/rec", "out": "D:/out"},
+     "defaults": {"recordings": "C:/Users/User/callsum/recordings",
+                  "out": "C:/Users/User/callsum/out"}}
     """;
 
     [Fact]
@@ -37,6 +39,17 @@ public class SettingsExchangeTests
     }
 
     [Fact]
+    public void Папка_по_умолчанию_приходит_подсказкой()
+    {
+        // Окно показывает её под полем: видно, от чего человек отказывается,
+        // выбирая свою папку.
+        var message = Assert.IsType<EngineEvent.Settings>(EngineEvent.Parse(Report));
+
+        Assert.Equal("C:/Users/User/callsum/out", message.DefaultPath("out"));
+        Assert.Equal("C:/Users/User/callsum/recordings", message.DefaultPath("recordings"));
+    }
+
+    [Fact]
     public void Отсутствующее_значение_не_ломает_окно()
     {
         var message = Assert.IsType<EngineEvent.Settings>(EngineEvent.Parse(
@@ -46,6 +59,7 @@ public class SettingsExchangeTests
         Assert.Null(message.Number("summary", "num_ctx"));
         Assert.False(message.Flag("summary", "enabled"));
         Assert.Equal("", message.ResolvedPath("out"));
+        Assert.Equal("", message.DefaultPath("out"));
     }
 
     [Fact]

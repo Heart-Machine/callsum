@@ -18,7 +18,9 @@ namespace Callsum.App;
 public sealed partial class SettingsWindow : Window
 {
     /// <summary>Поле формы: где значение живёт в файле и как называется для человека.</summary>
-    private sealed record Field(string Section, string Key, string Label, bool Required = true);
+    /// <param name="PathKey">Ключ папки в ответе ядра, если поле — это путь.</param>
+    private sealed record Field(
+        string Section, string Key, string Label, bool Required = true, string? PathKey = null);
 
     private readonly EngineClient _engine;
     private readonly ObsConnection _obs;
@@ -39,8 +41,8 @@ public sealed partial class SettingsWindow : Window
 
         AppWindow.Resize(new SizeInt32(620, 900));
 
-        _fields[Recordings] = new("paths", "recordings", "Записи созвонов");
-        _fields[Out] = new("paths", "out", "Расшифровки и протоколы");
+        _fields[Recordings] = new("paths", "recordings", "Записи", PathKey: "recordings");
+        _fields[Out] = new("paths", "out", "Расшифровки и протоколы", PathKey: "out");
         _fields[FolderTemplate] = new("paths", "folder_template", "Папка одного созвона");
         _fields[FilenameFormat] = new("obs", "filename_format", "Файл записи в OBS");
         _fields[WhisperModel] = new("transcribe", "model", "Модель распознавания");
@@ -123,37 +125,34 @@ public sealed partial class SettingsWindow : Window
 
         foreach (var (box, field) in _fields)
         {
-            box.Text = settings.Text(field.Section, field.Key);
+            // Папки показываются полным путём, даже если в файле они записаны
+            // относительно: «out» не говорит человеку, где искать протоколы.
+            box.Text = field.PathKey is { } key && settings.ResolvedPath(key) is { Length: > 0 } folder
+                ? folder
+                : settings.Text(field.Section, field.Key);
         }
 
         SummaryEnabled.IsOn = settings.Flag("summary", "enabled");
-        ShowResolved();
+        ShowDefaults();
 
         Form.IsEnabled = true;
         Save.IsEnabled = true;
     }
 
-    /// <summary>
-    /// Показать, куда путь ведёт на самом деле.
-    ///
-    /// В файле он может быть относительным — и человек, увидев «out», вправе
-    /// не догадаться, где искать готовые протоколы.
-    /// </summary>
-    private void ShowResolved()
+    /// <summary>Подсказать, куда программа сложила бы всё сама.</summary>
+    private void ShowDefaults()
     {
         if (_loaded is not { } settings)
         {
             return;
         }
 
-        RecordingsHint.Text = Hint(Recordings.Text, settings.ResolvedPath("recordings"));
-        OutHint.Text = Hint(Out.Text, settings.ResolvedPath("out"));
+        RecordingsHint.Text = Hint(settings.DefaultPath("recordings"));
+        OutHint.Text = Hint(settings.DefaultPath("out"));
     }
 
-    private static string Hint(string written, string resolved) =>
-        resolved.Length > 0 && !string.Equals(written.Trim(), resolved, StringComparison.OrdinalIgnoreCase)
-            ? $"Сейчас это {resolved}"
-            : "";
+    private static string Hint(string byDefault) =>
+        byDefault.Length > 0 ? $"По умолчанию {byDefault}" : "";
 
     private async void OnBrowseClick(object sender, RoutedEventArgs args)
     {
@@ -193,6 +192,15 @@ public sealed partial class SettingsWindow : Window
             return;
         }
 
+        if (Relative() is { } incomplete)
+        {
+            // Относительный путь считается от того места, откуда запущено ядро,
+            // и означает разные папки в разных руках. Программа хранит полные.
+            Status.Text = $"Путь в поле «{incomplete}» должен быть полным — "
+                          + $"например, {settings.DefaultPath("out")}";
+            return;
+        }
+
         var changes = Collect(settings);
         var devices = CollectDevices();
         if (changes.Count == 0 && devices.Count == 0)
@@ -210,7 +218,7 @@ public sealed partial class SettingsWindow : Window
             {
                 var saved = await _engine.SaveSettingsAsync(changes);
                 _loaded = saved;
-                ShowResolved();
+                ShowDefaults();
                 done.Add(Describe(changes));
             }
 
@@ -276,6 +284,12 @@ public sealed partial class SettingsWindow : Window
         .Select(pair => pair.Value.Label)
         .FirstOrDefault();
 
+    /// <summary>Название первой папки, путь к которой указан не полностью.</summary>
+    private string? Relative() => _fields
+        .Where(pair => pair.Value.PathKey is not null && !Path.IsPathFullyQualified(pair.Key.Text.Trim()))
+        .Select(pair => pair.Value.Label)
+        .FirstOrDefault();
+
     /// <summary>Только изменённые значения, разложенные по разделам файла.</summary>
     private Dictionary<string, Dictionary<string, object?>> Collect(EngineEvent.Settings settings)
     {
@@ -294,6 +308,19 @@ public sealed partial class SettingsWindow : Window
         foreach (var (box, field) in _fields)
         {
             var written = box.Text.Trim();
+            if (field.PathKey is { } key)
+            {
+                // Папка сравнивается с полным путём — её и показывали. Заодно
+                // относительный путь из старого файла переписывается на полный.
+                var stored = settings.Text(field.Section, field.Key);
+                if (written != settings.ResolvedPath(key) || !Path.IsPathFullyQualified(stored))
+                {
+                    Change(field.Section, field.Key, written);
+                }
+
+                continue;
+            }
+
             if (written != settings.Text(field.Section, field.Key))
             {
                 Change(field.Section, field.Key, written);

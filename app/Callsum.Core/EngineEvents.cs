@@ -62,7 +62,8 @@ public abstract record EngineEvent(string? Id)
     /// Владелец настроек — ядро: оно читает файл, знает умолчания и проверяет
     /// значения. Окно рисует по этим данным форму и возвращает изменения.
     /// </summary>
-    public sealed record Settings(string? Id, string Path, JsonElement Values, JsonElement Resolved)
+    public sealed record Settings(
+        string? Id, string Path, JsonElement Values, JsonElement Resolved, JsonElement Defaults)
         : EngineEvent(Id)
     {
         /// <summary>Строковое значение раздела или пусто, если его там нет.</summary>
@@ -81,9 +82,14 @@ public abstract record EngineEvent(string? Id)
                 : null;
 
         /// <summary>Куда путь указывает на самом деле: в файле он может быть относительным.</summary>
-        public string ResolvedPath(string key) =>
-            Resolved.ValueKind == JsonValueKind.Object
-             && Resolved.TryGetProperty(key, out var value)
+        public string ResolvedPath(string key) => Folder(Resolved, key);
+
+        /// <summary>Куда программа сложила бы всё сама, если не выбирать папку.</summary>
+        public string DefaultPath(string key) => Folder(Defaults, key);
+
+        private static string Folder(JsonElement block, string key) =>
+            block.ValueKind == JsonValueKind.Object
+             && block.TryGetProperty(key, out var value)
              && value.ValueKind == JsonValueKind.String
                 ? value.GetString() ?? ""
                 : "";
@@ -142,7 +148,8 @@ public abstract record EngineEvent(string? Id)
                     id,
                     ReadText(root, "path"),
                     Branch(root, "values"),
-                    Branch(root, "resolved")),
+                    Branch(root, "resolved"),
+                    Branch(root, "defaults")),
                 var other => new Unknown(other ?? "", root.Clone()),
             };
         }

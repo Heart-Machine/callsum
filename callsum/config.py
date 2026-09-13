@@ -192,7 +192,32 @@ def ensure_config(cfg_path: Path) -> Path | None:
 
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, cfg_path)
+    if source.name == EXAMPLE_NAME:
+        _write_absolute_paths(cfg_path)
     return source
+
+
+def _write_absolute_paths(cfg_path: Path) -> None:
+    """Записать в новый файл полные пути к папкам.
+
+    В примере пути относительные — иначе он был бы привязан к одной машине.
+    Но в личном файле относительный путь только сбивает с толку: «out» ничего
+    не говорит о том, где искать протоколы, и зависит от того, откуда запущена
+    программа. Поэтому при создании они разворачиваются в полные.
+    """
+    from . import settings  # локально: settings импортирует config
+
+    try:
+        text = cfg_path.read_text(encoding="utf-8")
+        cfg_path.write_text(
+            settings.apply(text, {"paths": {
+                key: str(data_dir() / DEFAULTS["paths"][key]) for key in ("recordings", "out")
+            }}),
+            encoding="utf-8",
+        )
+    except OSError:
+        # Не вышло — останутся относительные пути: программа и с ними работает.
+        pass
 
 
 def config_path() -> Path:
