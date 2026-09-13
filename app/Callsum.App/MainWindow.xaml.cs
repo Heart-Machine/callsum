@@ -159,7 +159,7 @@ public sealed partial class MainWindow : Window
     {
         // Подробность уточняет стадию там, где она о чём-то говорит: кого
         // распознаём сейчас и сколько мегабайт уже скачано.
-        var detailed = progress.Stage is EngineStage.Transcribe or EngineStage.Download;
+        var detailed = progress.Stage is EngineStage.Transcribe or EngineStage.Download or EngineStage.Model;
         Stage.Text = detailed && progress.Detail is { Length: > 0 } detail
             ? $"{EngineStage.Describe(progress.Stage)}: {detail}"
             : EngineStage.Describe(progress.Stage);
@@ -370,7 +370,14 @@ public sealed partial class MainWindow : Window
             // Кто сейчас ведёт запись, приложение не знает — таймер врал бы.
             _recordingSince = null;
             ApplyRecordingState(false);
-            Stage.Text = "Жду OBS";
+
+            // Пока идёт обработка, подпись занята делом: при закрытом OBS
+            // попытки подключиться повторяются каждые три секунды, и ход
+            // работы то и дело сменялся на «Жду OBS».
+            if (_queued == 0)
+            {
+                Stage.Text = "Жду OBS";
+            }
         }
     });
 

@@ -8,6 +8,9 @@ public static class EngineStage
     /// <summary>Первое распознавание на машине: программа доносит библиотеки CUDA.</summary>
     public const string Download = "download";
 
+    /// <summary>Она же доносит веса модели — это гигабайты и минуты.</summary>
+    public const string Model = "model";
+
     public const string Audio = "audio";
     public const string Transcribe = "transcribe";
     public const string Summary = "summary";
@@ -17,6 +20,7 @@ public static class EngineStage
     public static string Describe(string stage) => stage switch
     {
         Download => "Скачиваю библиотеки для видеокарты",
+        Model => "Скачиваю модель распознавания",
         Audio => "Готовлю дорожки…",
         Transcribe => "Распознаю речь",
         Summary => "Составляю протокол…",

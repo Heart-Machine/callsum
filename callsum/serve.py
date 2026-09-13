@@ -315,12 +315,12 @@ class Engine:
             self._transcriber = Transcriber(
                 self.cfg,
                 verbose=False,
-                # Библиотеки CUDA качаются при первом распознавании: около
-                # гигабайта, и молчать эти минуты нельзя.
-                on_progress=lambda fraction, detail: self.emit({
+                # При первом распознавании на машине качаются библиотеки CUDA
+                # и веса модели — гигабайты. Молчать эти минуты нельзя.
+                on_progress=lambda stage, fraction, detail: self.emit({
                     "event": "progress",
                     "id": request_id,
-                    "stage": "download",
+                    "stage": stage,
                     "fraction": fraction,
                     "detail": detail,
                 }),
