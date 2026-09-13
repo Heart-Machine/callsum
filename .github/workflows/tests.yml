@@ -24,3 +24,17 @@ jobs:
 
       - name: Тесты
         run: python -m pytest tests -q
+
+  app:
+    # Приложение и клиент OBS на C#. Отдельная работа, чтобы падение одной
+    # части было видно сразу, а не пряталось за другой.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Тесты
+        run: dotnet test app/Callsum.sln --nologo -v q

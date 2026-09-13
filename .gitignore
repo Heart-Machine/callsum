@@ -12,3 +12,7 @@ out/
 config.toml
 dist/
 build/
+
+# Сборки .NET
+bin/
+obj/
