@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace Callsum.Core;
@@ -25,6 +26,7 @@ public sealed class EngineClient : IAsyncDisposable
 
     private readonly IEngineTransport _transport;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<EngineEvent>> _waiting = new();
 
     private Task? _reader;
     private int _lastId;
@@ -62,13 +64,80 @@ public sealed class EngineClient : IAsyncDisposable
     public Task<string> DoctorAsync(CancellationToken cancellationToken = default)
         => SendAsync(new { cmd = "doctor" }, cancellationToken);
 
-    private async Task<string> SendAsync(object command, CancellationToken cancellationToken)
+    /// <summary>Спросить настройки и дождаться ответа.</summary>
+    public Task<EngineEvent.Settings> GetSettingsAsync(CancellationToken cancellationToken = default)
+        => AskAsync<EngineEvent.Settings>(new { cmd = "settings" }, cancellationToken);
+
+    /// <summary>
+    /// Сохранить изменённые значения и дождаться, пока ядро перечитает файл.
+    ///
+    /// Отправляются только изменения, по разделам: файл правится по одному
+    /// значению, и присылать целиком всё, что окно когда-то прочитало, значило
+    /// бы переписывать чужие правки, сделанные тем временем руками.
+    /// </summary>
+    public Task<EngineEvent.Settings> SaveSettingsAsync(
+        IReadOnlyDictionary<string, Dictionary<string, object?>> values,
+        CancellationToken cancellationToken = default)
+        => AskAsync<EngineEvent.Settings>(new { cmd = "settings_set", values }, cancellationToken);
+
+    /// <summary>
+    /// Отправить команду и дождаться ответа именно на неё.
+    ///
+    /// Ответы сопоставляются по номеру задания: ядро выполняет команды по
+    /// очереди, и пока идёт распознавание часового созвона, ответ на «покажи
+    /// настройки» придёт много позже, чем его отправили.
+    /// </summary>
+    private async Task<T> AskAsync<T>(object command, CancellationToken cancellationToken)
+        where T : EngineEvent
+    {
+        var waiter = new TaskCompletionSource<EngineEvent>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var id = await SendAsync(command, cancellationToken, waiter).ConfigureAwait(false);
+
+        try
+        {
+            using var registration = cancellationToken.Register(
+                () => waiter.TrySetCanceled(cancellationToken));
+            var answer = await waiter.Task.ConfigureAwait(false);
+            return answer switch
+            {
+                T expected => expected,
+                EngineEvent.Failed failed => throw new EngineException(failed.Message),
+                _ => throw new EngineException($"Ядро ответило не тем, что ожидалось: {answer}"),
+            };
+        }
+        finally
+        {
+            _waiting.TryRemove(id, out _);
+        }
+    }
+
+    private async Task<string> SendAsync(
+        object command,
+        CancellationToken cancellationToken,
+        TaskCompletionSource<EngineEvent>? waiter = null)
     {
         var id = Interlocked.Increment(ref _lastId).ToString();
+        if (waiter is not null)
+        {
+            // Ожидание заводится до отправки: ответ может прийти раньше, чем
+            // вернётся управление из записи в трубу.
+            _waiting[id] = waiter;
+        }
+
         var payload = JsonSerializer.SerializeToNode(command, SerializerOptions)!.AsObject();
         payload["id"] = id;
-        await _transport.SendAsync(payload.ToJsonString(SerializerOptions), cancellationToken)
-            .ConfigureAwait(false);
+        try
+        {
+            await _transport.SendAsync(payload.ToJsonString(SerializerOptions), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            _waiting.TryRemove(id, out _);
+            throw;
+        }
+
         return id;
     }
 
@@ -85,9 +154,24 @@ public sealed class EngineClient : IAsyncDisposable
             Diagnostics?.Invoke($"! Чтение событий ядра прервано: {exception}");
         }
 
+        // Ждущие ответа должны узнать, что его уже не будет: иначе окно
+        // настроек останется с вечной надписью «читаю настройки…».
+        FailWaiting(new EngineException("Ядро обработки завершилось, не ответив"));
+
         if (!_lifetime.IsCancellationRequested)
         {
             Stopped?.Invoke();
+        }
+    }
+
+    private void FailWaiting(Exception reason)
+    {
+        foreach (var id in _waiting.Keys)
+        {
+            if (_waiting.TryRemove(id, out var waiter))
+            {
+                waiter.TrySetException(reason);
+            }
         }
     }
 
@@ -124,6 +208,8 @@ public sealed class EngineClient : IAsyncDisposable
                 continue;
             }
 
+            Answer(message);
+
             try
             {
                 EventReceived?.Invoke(message);
@@ -132,6 +218,22 @@ public sealed class EngineClient : IAsyncDisposable
             {
                 // Ошибка подписчика не должна останавливать чтение событий.
             }
+        }
+    }
+
+    /// <summary>Отдать событие тому, кто ждёт ответа именно на эту команду.</summary>
+    private void Answer(EngineEvent message)
+    {
+        // Ход работы и строки журнала тоже помечены номером задания, но ответом
+        // на команду не являются: ждущий должен дождаться настоящего ответа.
+        if (message is EngineEvent.Progress or EngineEvent.Log)
+        {
+            return;
+        }
+
+        if (message.Id is { Length: > 0 } id && _waiting.TryRemove(id, out var waiter))
+        {
+            waiter.TrySetResult(message);
         }
     }
 

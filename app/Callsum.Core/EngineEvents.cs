@@ -56,6 +56,47 @@ public abstract record EngineEvent(string? Id)
                 : null;
     }
 
+    /// <summary>
+    /// Настройки: значения как они записаны в config.toml и куда указывают пути.
+    ///
+    /// Владелец настроек — ядро: оно читает файл, знает умолчания и проверяет
+    /// значения. Окно рисует по этим данным форму и возвращает изменения.
+    /// </summary>
+    public sealed record Settings(string? Id, string Path, JsonElement Values, JsonElement Resolved)
+        : EngineEvent(Id)
+    {
+        /// <summary>Строковое значение раздела или пусто, если его там нет.</summary>
+        public string Text(string section, string key) =>
+            Field(section, key) is { ValueKind: JsonValueKind.String } value
+                ? value.GetString() ?? ""
+                : "";
+
+        public bool Flag(string section, string key) =>
+            Field(section, key) is { ValueKind: JsonValueKind.True };
+
+        public double? Number(string section, string key) =>
+            Field(section, key) is { ValueKind: JsonValueKind.Number } value
+             && value.TryGetDouble(out var number)
+                ? number
+                : null;
+
+        /// <summary>Куда путь указывает на самом деле: в файле он может быть относительным.</summary>
+        public string ResolvedPath(string key) =>
+            Resolved.ValueKind == JsonValueKind.Object
+             && Resolved.TryGetProperty(key, out var value)
+             && value.ValueKind == JsonValueKind.String
+                ? value.GetString() ?? ""
+                : "";
+
+        private JsonElement? Field(string section, string key) =>
+            Values.ValueKind == JsonValueKind.Object
+             && Values.TryGetProperty(section, out var block)
+             && block.ValueKind == JsonValueKind.Object
+             && block.TryGetProperty(key, out var value)
+                ? value
+                : null;
+    }
+
     /// <summary>Событие неизвестного вида: ядро новее приложения — не повод падать.</summary>
     public sealed record Unknown(string Type, JsonElement Data) : EngineEvent((string?)null);
 
@@ -97,10 +138,19 @@ public abstract record EngineEvent(string? Id)
                 "done" => new Done(id, ReadText(root, "out_dir"), ReadFlag(root, "summary")),
                 "error" => new Failed(id, ReadText(root, "message")),
                 "doctor" => new Doctor(id, root.Clone()),
+                "settings" => new Settings(
+                    id,
+                    ReadText(root, "path"),
+                    Branch(root, "values"),
+                    Branch(root, "resolved")),
                 var other => new Unknown(other ?? "", root.Clone()),
             };
         }
     }
+
+    /// <summary>Вложенный объект события — своей копией: исходный документ закроется.</summary>
+    private static JsonElement Branch(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) ? value.Clone() : default;
 
     private static string ReadText(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

@@ -27,6 +27,7 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<ResultRow> _results = [];
 
     private EngineClient? _engine;
+    private SettingsWindow? _settings;
     private DateTimeOffset? _recordingSince;
     private string? _outFolder;
     private string? _markdownApp;
@@ -120,7 +121,16 @@ public sealed partial class MainWindow : Window
                 break;
 
             case EngineEvent.Doctor doctor:
-                ApplyFolders(doctor);
+                ApplyFolders(
+                    doctor.OutFolder, doctor.RecordingsFolder, doctor.MarkdownApp);
+                break;
+
+            // Настройки могли поменять папки прямо сейчас — в окне настроек.
+            case EngineEvent.Settings settings:
+                ApplyFolders(
+                    settings.ResolvedPath("out"),
+                    settings.ResolvedPath("recordings"),
+                    settings.Text("view", "markdown_app"));
                 break;
 
             case EngineEvent.Done done:
@@ -168,13 +178,18 @@ public sealed partial class MainWindow : Window
     }
 
     // --- список записей ------------------------------------------------
-    private void ApplyFolders(EngineEvent.Doctor doctor)
+    private void ApplyFolders(string? outFolder, string? recordings, string? markdownApp)
     {
-        _outFolder = doctor.OutFolder;
-        _markdownApp = doctor.MarkdownApp;
-        _recordingsFolder = doctor.RecordingsFolder;
+        var moved = !string.Equals(_outFolder, outFolder, StringComparison.OrdinalIgnoreCase);
+        _outFolder = string.IsNullOrWhiteSpace(outFolder) ? _outFolder : outFolder;
+        _recordingsFolder = string.IsNullOrWhiteSpace(recordings) ? _recordingsFolder : recordings;
+        _markdownApp = markdownApp;
         OpenOutFolder.IsEnabled = !string.IsNullOrWhiteSpace(_outFolder);
-        _ = ReloadResultsAsync();
+
+        if (moved)
+        {
+            _ = ReloadResultsAsync();
+        }
     }
 
     private async Task ReloadResultsAsync()
@@ -232,6 +247,31 @@ public sealed partial class MainWindow : Window
             // которое ничего не делает, выглядит поломкой.
             Report(Shell.OpenFile(row.Result.MainDocument, _markdownApp));
         }
+    }
+
+    // --- настройки -----------------------------------------------------
+    private void OnSettingsClick(object sender, RoutedEventArgs args)
+    {
+        if (_engine is null)
+        {
+            Append($"! Настройки читает ядро обработки: {EngineLocator.NotFoundMessage}");
+            return;
+        }
+
+        // Второе окно настроек показывало бы те же значения дважды, и сохранение
+        // из одного затирало бы то, что набрано в другом.
+        if (_settings is not null)
+        {
+            _settings.Activate();
+            return;
+        }
+
+        // О сохранении в журнал пишет само ядро — второй раз повторять незачем,
+        // а папки окно обновит по событию с настройками.
+        var window = new SettingsWindow(_engine);
+        window.Closed += (_, _) => _settings = null;
+        _settings = window;
+        window.Activate();
     }
 
     private async void OnReprocessClick(object sender, RoutedEventArgs args)
