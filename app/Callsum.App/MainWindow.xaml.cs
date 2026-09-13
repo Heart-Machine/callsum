@@ -30,6 +30,7 @@ public sealed partial class MainWindow : Window
     private DateTimeOffset? _recordingSince;
     private string? _outFolder;
     private string? _markdownApp;
+    private string? _recordingsFolder;
     private bool _pending;
     private int _queued;
 
@@ -171,6 +172,7 @@ public sealed partial class MainWindow : Window
     {
         _outFolder = doctor.OutFolder;
         _markdownApp = doctor.MarkdownApp;
+        _recordingsFolder = doctor.RecordingsFolder;
         OpenOutFolder.IsEnabled = !string.IsNullOrWhiteSpace(_outFolder);
         _ = ReloadResultsAsync();
     }
@@ -230,6 +232,27 @@ public sealed partial class MainWindow : Window
             // которое ничего не делает, выглядит поломкой.
             Report(Shell.OpenFile(row.Result.MainDocument, _markdownApp));
         }
+    }
+
+    private async void OnReprocessClick(object sender, RoutedEventArgs args)
+    {
+        if (sender is not FrameworkElement { Tag: ResultRow row })
+        {
+            return;
+        }
+
+        // Ядру нужен путь к самой записи: результат оно собирает заново с нуля.
+        var path = row.Result.FindSource(_recordingsFolder);
+        if (path is null)
+        {
+            Append($"! Не нашёл исходную запись для «{row.Name}»"
+                   + $" — её имя {row.Result.SourceName ?? "неизвестно"},"
+                   + $" искал в {_recordingsFolder ?? "папке записей"}");
+            return;
+        }
+
+        Append($"Обрабатываю заново: {Path.GetFileName(path)}");
+        await ProcessAsync(path, force: true);
     }
 
     private void OnOpenFolderClick(object sender, RoutedEventArgs args)
@@ -293,7 +316,7 @@ public sealed partial class MainWindow : Window
         await ProcessAsync(path);
     });
 
-    private async Task ProcessAsync(string path)
+    private async Task ProcessAsync(string path, bool force = false)
     {
         if (_engine is null)
         {
@@ -303,7 +326,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            await _engine.ProcessAsync(path).ConfigureAwait(true);
+            await _engine.ProcessAsync(path, force).ConfigureAwait(true);
             _queued++;
         }
         catch (EngineException exception)

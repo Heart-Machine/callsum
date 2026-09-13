@@ -9,14 +9,20 @@ public class CallResultsTests : IDisposable
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
-    private string Folder(string name, bool transcript = true, bool summary = false, DateTime? when = null)
+    private string Folder(
+        string name,
+        bool transcript = true,
+        bool summary = false,
+        DateTime? when = null,
+        string? source = "запись.mkv")
     {
         var folder = Path.Combine(_root, name);
         Directory.CreateDirectory(folder);
         if (transcript)
         {
             var path = Path.Combine(folder, CallResults.TranscriptName);
-            File.WriteAllText(path, "# Расшифровка");
+            var header = source is null ? "" : $"\n- Файл: {source}\n- Длительность: 00:10:00\n";
+            File.WriteAllText(path, $"# Расшифровка: {name}\n{header}\n---\n\nразговор");
             if (when is { } moment)
             {
                 File.SetLastWriteTime(path, moment);
@@ -88,6 +94,84 @@ public class CallResultsTests : IDisposable
         // Первый запуск у коллеги: обрабатывать ещё нечего, окно должно открыться.
         Assert.Empty(CallResults.Scan(Path.Combine(_root, "ещё-нет")));
         Assert.Empty(CallResults.Scan(""));
+    }
+
+    [Fact]
+    public void Результат_помнит_из_какой_записи_он_сделан()
+    {
+        // Чтобы обработать созвон заново, ядру нужен путь к записи. Имя папки
+        // для этого не годится: она собирается по настраиваемому шаблону.
+        Folder("вчерашний созвон", source: "2026-09-13 11-33-22.mkv");
+
+        var result = Assert.Single(CallResults.Scan(_root));
+
+        Assert.Equal("2026-09-13 11-33-22.mkv", result.SourceName);
+    }
+
+    [Fact]
+    public void Расшифровка_без_имени_записи_не_ломает_список()
+    {
+        // Старые расшифровки заголовка могли не иметь — запись всё равно
+        // показывается, просто обработать её заново не выйдет.
+        Folder("без заголовка", source: null);
+
+        Assert.Null(Assert.Single(CallResults.Scan(_root)).SourceName);
+    }
+
+    [Fact]
+    public void Имя_записи_ищется_только_в_заголовке()
+    {
+        // Ниже разделителя начинается сам разговор: там «- Файл:» может
+        // оказаться просто фразой собеседника, и верить ей нельзя.
+        var folder = Path.Combine(_root, "разговор про файлы");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(
+            Path.Combine(folder, CallResults.TranscriptName),
+            "# Расшифровка\n\n---\n\n[00:01] Я: - Файл: договор.docx посмотри\n");
+
+        Assert.Null(CallResults.Read(folder)?.SourceName);
+    }
+
+    [Fact]
+    public void Запись_ищется_по_запомненному_пути()
+    {
+        // Точный путь пишется в машинный разбор при обработке — он и главный.
+        var recording = Path.Combine(_root, "созвон.mkv");
+        File.WriteAllText(recording, "");
+        var folder = Folder("результат");
+        File.WriteAllText(
+            Path.Combine(folder, CallResults.DataName),
+            $$"""{"source": {{System.Text.Json.JsonSerializer.Serialize(recording)}}, "segments": []}""");
+
+        var result = Assert.IsType<CallResult>(CallResults.Read(folder));
+
+        Assert.Equal(recording, result.SourcePath);
+        Assert.Equal(recording, result.FindSource(recordingsFolder: null));
+    }
+
+    [Fact]
+    public void Переехавшая_запись_ищется_по_имени_в_папке_записей()
+    {
+        // Путь из разбора может устареть: папку переименовали, диск сменился.
+        var recordings = Directory.CreateDirectory(Path.Combine(_root, "записи")).FullName;
+        File.WriteAllText(Path.Combine(recordings, "созвон.mkv"), "");
+        var folder = Folder("результат", source: "созвон.mkv");
+        File.WriteAllText(
+            Path.Combine(folder, CallResults.DataName),
+            """{"source": "Z:\\которого\\нет\\созвон.mkv", "segments": []}""");
+
+        var result = Assert.IsType<CallResult>(CallResults.Read(folder));
+
+        Assert.Equal(Path.Combine(recordings, "созвон.mkv"), result.FindSource(recordings));
+    }
+
+    [Fact]
+    public void Пропавшая_запись_честно_не_находится()
+    {
+        // Окно должно сказать об этом, а не молча ничего не делать.
+        var folder = Folder("результат", source: "потерянный созвон.mkv");
+
+        Assert.Null(CallResults.Read(folder)?.FindSource(_root));
     }
 
     [Fact]
