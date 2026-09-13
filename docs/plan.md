@@ -53,6 +53,8 @@ WinUI 3, C#                 ядро («мотор»)              внешни�
 {"cmd": "process",   "id": "1", "path": "D:/recordings/2026-09-12 14-03-11.mkv", "force": false}
 {"cmd": "summarize", "id": "2", "transcript": "D:/out/созвон/transcript.md"}
 {"cmd": "doctor",    "id": "3"}
+{"cmd": "settings",  "id": "4"}
+{"cmd": "settings_set", "id": "5", "values": {"paths": {"out": "D:/созвоны"}}}
 {"cmd": "shutdown"}
 ```
 
@@ -64,7 +66,14 @@ WinUI 3, C#                 ядро («мотор»)              внешни�
 {"event": "done",     "id": "1", "out_dir": "D:/out/созвон", "summary": true}
 {"event": "error",    "id": "1", "message": "Все дорожки пустые — распознавать нечего"}
 {"event": "ready",    "device": "cuda", "compute_type": "float16"}
+{"event": "settings", "id": "4", "path": "…/config.toml", "values": {}, "resolved": {}}
 ```
+
+Настройки живут в одном файле — `config.toml`, — и владеет им ядро: оно и так читает его
+при каждом запуске, знает умолчания и умеет проверять значения. Приложение получает их
+командой `settings`, показывает форму и возвращает изменения; ядро правит файл по одному
+значению, сохраняя комментарии, и перечитывает себя. Второго хранилища настроек, своего
+у приложения, нет — расходиться было бы нечему.
 
 Стадии те же, что сейчас: `audio`, `transcribe`, `summary`, `done`. Это ровно тот набор,
 который уже отдаёт `pipeline.process`, так что на стороне Python добавляется только команда

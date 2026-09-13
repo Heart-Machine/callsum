@@ -263,10 +263,14 @@ def main(argv: list[str] | None = None) -> int:
         cfg = config.load(args.config)
     except config.ConfigError as exc:
         return _report_config_error(str(exc), args.command == "gui")
-    if cfg.created:
+    if cfg.created_from is not None:
         # В поток ошибок: в режиме мотора в stdout идёт только протокол.
+        # Перенос прежних настроек и создание из примера — разные новости,
+        # и человеку важно знать, какая из них случилась.
+        moved = cfg.created_from.name != config.EXAMPLE_NAME
         print(
-            f"Создан {cfg.source} из {config.EXAMPLE_NAME} — настройки правьте в нём.",
+            f"Настройки перенесены в {cfg.source} из {cfg.created_from}." if moved
+            else f"Создан {cfg.source} из {config.EXAMPLE_NAME} — настройки правьте в нём.",
             file=sys.stderr,
         )
     return args.func(args, cfg)

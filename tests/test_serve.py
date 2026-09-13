@@ -281,3 +281,87 @@ def test_commands_are_read_line_by_line(monkeypatch):
     monkeypatch.setattr(serve_module.sys, "stdin", LineByLine("первая\nвторая\n"))
 
     assert list(_stdin_lines()) == ["первая\n", "вторая\n"]
+
+
+# --- настройки -------------------------------------------------------------
+def test_settings_are_reported_with_their_file(cfg, tmp_path):
+    """Окно рисует форму по этим данным, поэтому в ответе и значения, и пути."""
+    source = tmp_path / "config.toml"
+    source.write_text("[paths]\nout = 'out'\n", encoding="utf-8")
+    cfg.source = source
+
+    events = run(cfg, {"cmd": "settings", "id": "1"})
+    report = next(e for e in events if e["event"] == "settings")
+
+    assert report["path"] == str(source)
+    assert report["values"]["summary"]["model"] == cfg.summary["model"]
+    # Относительный путь в файле — обычное дело: окну нужно показать, где
+    # файлы окажутся на самом деле.
+    assert report["resolved"]["out"] == str(cfg.path("out"))
+
+
+def test_settings_are_written_and_applied(cfg, tmp_path):
+    source = tmp_path / "config.toml"
+    source.write_text("# папки\n[paths]\nout = 'out'\n", encoding="utf-8")
+    cfg.source = source
+
+    events = run(
+        cfg,
+        {"cmd": "settings_set", "id": "1", "values": {"paths": {"out": str(tmp_path / "готовое")}}},
+        {"cmd": "settings", "id": "2"},
+    )
+
+    assert "# папки" in source.read_text(encoding="utf-8"), "комментарии должны остаться"
+    report = [e for e in events if e["event"] == "settings"][-1]
+    assert report["values"]["paths"]["out"] == str(tmp_path / "готовое")
+    assert report["resolved"]["out"] == str(tmp_path / "готовое")
+
+
+def test_previous_settings_are_kept_beside_the_new_ones(cfg, tmp_path):
+    """Оборвись запись на середине — пользователь остался бы без настроек."""
+    source = tmp_path / "config.toml"
+    source.write_text("[paths]\nout = 'было'\n", encoding="utf-8")
+    cfg.source = source
+
+    run(cfg, {"cmd": "settings_set", "id": "1", "values": {"paths": {"out": "стало"}}})
+
+    assert "было" in (tmp_path / "config.toml.bak").read_text(encoding="utf-8")
+    assert "стало" in source.read_text(encoding="utf-8")
+
+
+def test_unknown_settings_section_is_refused(cfg, tmp_path):
+    cfg.source = tmp_path / "config.toml"
+
+    events = run(cfg, {"cmd": "settings_set", "id": "1", "values": {"погода": {"дождь": True}}})
+
+    error = next(e for e in events if e["event"] == "error")
+    assert "погода" in error["message"]
+    assert not (tmp_path / "config.toml").exists()
+
+
+def test_settings_must_come_in_sections(cfg, tmp_path):
+    cfg.source = tmp_path / "config.toml"
+
+    events = run(cfg, {"cmd": "settings_set", "id": "1", "values": {"out": "D:/созвоны"}})
+
+    assert any(e["event"] == "error" for e in events)
+
+
+def test_changed_model_drops_the_loaded_one(cfg, tmp_path, monkeypatch):
+    """Модель уже в видеопамяти: после смены выбора её нужно перезагрузить."""
+    source = tmp_path / "config.toml"
+    source.write_text("[transcribe]\nmodel = 'large-v3'\n", encoding="utf-8")
+    cfg.source = source
+
+    released: list[str] = []
+
+    class FakeTranscriber:
+        def release(self):
+            released.append("да")
+
+    engine = serve_module.Engine(cfg, lambda message: None)
+    engine._transcriber = FakeTranscriber()
+    engine._run({"cmd": "settings_set", "id": "1", "values": {"transcribe": {"model": "medium"}}})
+
+    assert released == ["да"]
+    assert engine._transcriber is None
