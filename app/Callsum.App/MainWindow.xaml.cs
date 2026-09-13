@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
     private readonly ObsConnection _obs;
     private readonly DispatcherQueueTimer _clock;
     private readonly Notifications _notifications;
+    private readonly Updates _updates;
     private readonly ObservableCollection<ResultRow> _results = [];
 
     private EngineClient? _engine;
@@ -57,8 +58,11 @@ public sealed partial class MainWindow : Window
         _clock.Tick += (_, _) => UpdateTimer();
         _clock.Start();
 
+        _updates = new Updates(message => _ui.TryEnqueue(() => Append(message)));
+
         _obs.Start();
         _ = StartEngineAsync();
+        _ = CheckUpdatesAsync();
     }
 
     // --- ядро обработки ------------------------------------------------
@@ -281,6 +285,36 @@ public sealed partial class MainWindow : Window
             // которое ничего не делает, выглядит поломкой.
             Report(Shell.OpenFile(row.Result.MainDocument, _markdownApp));
         }
+    }
+
+    // --- обновления ----------------------------------------------------
+    private async Task CheckUpdatesAsync()
+    {
+        var version = await _updates.FetchAsync();
+        if (version is null)
+        {
+            return;
+        }
+
+        _ui.TryEnqueue(() =>
+        {
+            UpdateReady.Content = $"Обновить до {version}";
+            UpdateReady.Visibility = Visibility.Visible;
+            Append($"Скачано обновление {version}. Нажмите «Обновить» — приложение перезапустится.");
+        });
+    }
+
+    private void OnUpdateClick(object sender, RoutedEventArgs args)
+    {
+        if (_recordingSince is not null)
+        {
+            // Перезапуск посреди записи оборвал бы созвон.
+            Append("! Сейчас идёт запись — обновлю, когда она закончится");
+            return;
+        }
+
+        Append("Обновляюсь и перезапускаюсь…");
+        _updates.Apply();
     }
 
     // --- настройки -----------------------------------------------------

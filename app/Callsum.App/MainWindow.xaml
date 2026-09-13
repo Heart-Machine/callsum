@@ -27,12 +27,21 @@
                 Text="OBS: подключаюсь…"
                 Opacity="0.6" />
 
-            <HyperlinkButton
-                x:Name="OpenSettings"
-                HorizontalAlignment="Right"
-                Padding="4,0"
-                Content="Настройки"
-                Click="OnSettingsClick" />
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+                <!-- Появляется, только когда обновление уже скачано: предлагать
+                     перезапуск до этого — обманывать ожидание. -->
+                <HyperlinkButton
+                    x:Name="UpdateReady"
+                    Padding="4,0"
+                    Visibility="Collapsed"
+                    Click="OnUpdateClick" />
+
+                <HyperlinkButton
+                    x:Name="OpenSettings"
+                    Padding="4,0"
+                    Content="Настройки"
+                    Click="OnSettingsClick" />
+            </StackPanel>
         </Grid>
 
         <Button
