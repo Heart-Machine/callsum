@@ -250,3 +250,24 @@ def test_plain_missing_file_has_no_extra_advice(cfg, tmp_path):
     events = run(cfg, {"cmd": "process", "id": "1", "path": str(tmp_path / "absent.mkv")})
     error = next(e for e in events if e["event"] == "error")
     assert "OutputEncoding" not in error["message"]
+
+
+def test_commands_are_read_line_by_line(monkeypatch):
+    """Чтение stdin пачками подвешивало ядро: команда застревала в буфере.
+
+    Приложение отправляет по одной строке и ждёт ответа, поэтому ядро обязано
+    читать построчно, а не блоками по восемь килобайт.
+    """
+    import io
+
+    from callsum.serve import _stdin_lines
+
+    class LineByLine(io.StringIO):
+        """Поток, который отдаёт строки только через readline."""
+
+        def __iter__(self):
+            raise AssertionError("чтение итерацией буферизуется — так нельзя")
+
+    monkeypatch.setattr(serve_module.sys, "stdin", LineByLine("первая\nвторая\n"))
+
+    assert list(_stdin_lines()) == ["первая\n", "вторая\n"]
