@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Callsum.ObsTool", "Callsum.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Callsum.Obs.Tests", "Callsum.Obs.Tests\Callsum.Obs.Tests.csproj", "{CC99212D-6209-44BE-938A-A422AD092491}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Callsum.App", "Callsum.App\Callsum.App.csproj", "{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{CC99212D-6209-44BE-938A-A422AD092491}.Release|x64.Build.0 = Release|Any CPU
 		{CC99212D-6209-44BE-938A-A422AD092491}.Release|x86.ActiveCfg = Release|Any CPU
 		{CC99212D-6209-44BE-938A-A422AD092491}.Release|x86.Build.0 = Release|Any CPU
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Debug|Any CPU.Build.0 = Debug|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Debug|x64.ActiveCfg = Debug|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Debug|x64.Build.0 = Debug|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Debug|x86.ActiveCfg = Debug|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Debug|x86.Build.0 = Debug|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Release|Any CPU.ActiveCfg = Release|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Release|Any CPU.Build.0 = Release|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Release|x64.ActiveCfg = Release|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Release|x64.Build.0 = Release|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Release|x86.ActiveCfg = Release|x64
+		{9529CFB3-54F7-45A6-AD6E-C51A90DEAA95}.Release|x86.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
