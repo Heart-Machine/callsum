@@ -166,3 +166,15 @@ def test_moved_settings_are_reported_as_moved(tmp_path, monkeypatch):
 
     assert cfg.created_from == previous
     assert cfg.paths["out"] == "своё"
+
+
+def test_downloads_live_outside_the_install_folder(tmp_path, monkeypatch):
+    """Установщик очищает свою папку — скачанное туда класть нельзя.
+
+    Первая же проверка установщика унесла из %LOCALAPPDATA%\callsum два
+    гигабайта библиотек CUDA: эту папку Velopack считает своей.
+    """
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    assert config.local_dir() == tmp_path / "callsum-data"
+    assert config.local_dir().name != "callsum"
