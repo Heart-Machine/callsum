@@ -2,25 +2,51 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tomllib
 from pathlib import Path
 from typing import Any
 
-def _base_dir() -> Path:
-    """Папка, относительно которой лежат config.toml и папки пользователя.
+def _frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
 
-    В собранном ядре код распакован во внутренний каталог, а настройки и записи
-    должны лежать рядом с исполняемым файлом, а не внутри сборки.
-    """
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
+
+def _repo_dir() -> Path:
+    """Корень исходников — он же рабочая папка разработчика."""
     return Path(__file__).resolve().parent.parent
 
 
-# Данные пользователя: config.toml, recordings, out.
-ROOT = _base_dir()
+def config_dir() -> Path:
+    """Где живёт config.toml.
+
+    У установленного приложения — в профиле пользователя: программа
+    обновляется целиком, и настройки не должны переустанавливаться вместе с ней.
+    Раньше файл лежал рядом с ядром, внутри папки сборки, и пересборка его
+    стирала вместе со всем, что там накопилось.
+
+    При запуске из исходников ничего не меняется: настройки берутся из
+    репозитория, чтобы разработка не перемешивалась с рабочими настройками.
+    """
+    if not _frozen():
+        return _repo_dir()
+    appdata = os.environ.get("APPDATA")
+    return Path(appdata) / "callsum" if appdata else Path(sys.executable).resolve().parent
+
+
+def data_dir() -> Path:
+    """Папка по умолчанию для записей и результатов.
+
+    Профиль пользователя, а не «Документы»: созвоны весят гигабайтами, а
+    «Документы» на многих машинах перенаправлены в OneDrive — записи разговоров
+    молча уезжали бы в облако, чего программа обещает не делать.
+    """
+    return _repo_dir() if not _frozen() else Path.home() / "callsum"
+
+
+# Данные пользователя: recordings, out — относительные пути считаются отсюда.
+ROOT = data_dir()
 # Ресурсы самой программы: промпты и пример настроек — они внутри сборки.
 RESOURCES = Path(__file__).resolve().parent.parent
 
@@ -85,11 +111,21 @@ class ConfigError(RuntimeError):
 
 
 class Config:
-    def __init__(self, data: dict[str, Any], source: Path | None = None, created: bool = False):
+    def __init__(
+        self,
+        data: dict[str, Any],
+        source: Path | None = None,
+        created_from: Path | None = None,
+    ):
         self.data = data
         self.source = source
-        # Правда ли, что файл только что создан из примера — чтобы сказать об этом.
-        self.created = created
+        # Из чего файл только что создан — пример или настройки прежней версии.
+        # Нужно, чтобы сказать об этом вслух: это разные новости.
+        self.created_from = created_from
+
+    @property
+    def created(self) -> bool:
+        return self.created_from is not None
 
     @property
     def paths(self) -> dict: return self.data["paths"]
@@ -122,26 +158,52 @@ class Config:
         return str(self.speakers.get(str(track_no), f"Дорожка {track_no}"))
 
 
-def ensure_config(cfg_path: Path) -> bool:
-    """Создать config.toml из примера, если его ещё нет.
+def _inherited_config() -> Path | None:
+    """Настройки прежних версий — они лежали рядом с ядром, в папке сборки."""
+    if not _frozen():
+        return None
+    previous = Path(sys.executable).resolve().parent / "config.toml"
+    return previous if previous.is_file() else None
 
-    Возвращает True, если файл был создан. Без него программа тоже работает —
-    все значения продублированы в DEFAULTS, — но править удобнее файл
-    с комментариями, чем искать параметры в коде.
+
+def ensure_config(cfg_path: Path) -> Path | None:
+    """Создать config.toml, если его ещё нет.
+
+    Настройки прежней версии, лежавшие рядом с ядром, переносятся: пути к папкам
+    и выбранную модель пользователь задавал сам, и терять их при переезде нельзя.
+    Иначе файл создаётся из примера — править файл с комментариями удобнее, чем
+    искать параметры в коде (без него программа тоже работает: всё есть
+    в DEFAULTS).
+
+    Возвращает файл, из которого настройки взяты, или None, если создавать
+    ничего не пришлось. Откуда именно они взялись, программа говорит вслух:
+    «перенёс ваши прежние» и «создал из примера» — разные новости.
     """
-    example = cfg_path.parent / EXAMPLE_NAME
-    if not example.is_file():
-        example = RESOURCES / EXAMPLE_NAME
-    if cfg_path.exists() or not example.is_file():
-        return False
-    shutil.copyfile(example, cfg_path)
-    return True
+    if cfg_path.exists():
+        return None
+
+    source = _inherited_config()
+    if source is None:
+        source = cfg_path.parent / EXAMPLE_NAME
+        if not source.is_file():
+            source = RESOURCES / EXAMPLE_NAME
+    if not source.is_file():
+        return None
+
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, cfg_path)
+    return source
+
+
+def config_path() -> Path:
+    """Полный путь к файлу настроек."""
+    return config_dir() / "config.toml"
 
 
 def load(path: str | Path | None = None) -> Config:
-    cfg_path = Path(path) if path else (ROOT / "config.toml")
+    cfg_path = Path(path) if path else config_path()
     # Свой путь пользователь указал сам: создавать что-то за него не нужно.
-    created = ensure_config(cfg_path) if path is None else False
+    created_from = ensure_config(cfg_path) if path is None else None
     if cfg_path.exists():
         try:
             with cfg_path.open("rb") as fh:
@@ -153,5 +215,5 @@ def load(path: str | Path | None = None) -> Config:
                 "нужно удваивать. Проще записать путь в одинарных кавычках: "
                 r"'C:\Program Files\Typora\Typora.exe'"
             ) from exc
-        return Config(_merge(DEFAULTS, user), cfg_path, created)
+        return Config(_merge(DEFAULTS, user), cfg_path, created_from)
     return Config(DEFAULTS, None)

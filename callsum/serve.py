@@ -10,6 +10,8 @@
     {"cmd": "process",   "id": "1", "path": "D:/rec/созвон.mkv", "force": false}
     {"cmd": "summarize", "id": "2", "transcript": "D:/out/созвон/transcript.md"}
     {"cmd": "doctor",    "id": "3"}
+    {"cmd": "settings",  "id": "4"}
+    {"cmd": "settings_set", "id": "5", "values": {"paths": {"out": "D:/созвоны"}}}
     {"cmd": "shutdown"}
 
 События:
@@ -19,6 +21,7 @@
     {"event": "log",      "id": "1", "text": "…"}
     {"event": "done",     "id": "1", "out_dir": "…", "summary": true}
     {"event": "error",    "id": "1", "message": "…"}
+    {"event": "settings", "id": "4", "path": "…/config.toml", "values": {…}, "resolved": {…}}
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-from . import __version__, audio, naming, summarize
+from . import __version__, audio, config, naming, settings, summarize
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -89,6 +92,8 @@ class Engine:
             "process": self._process,
             "summarize": self._summarize,
             "doctor": self._doctor,
+            "settings": self._settings,
+            "settings_set": self._settings_set,
         }.get(str(name))
         if handler is None:
             self.emit({
@@ -173,6 +178,81 @@ class Engine:
         self.emit({
             "event": "done", "id": request_id, "out_dir": str(target.parent), "summary": True,
         })
+
+    # --- настройки ----------------------------------------------------
+    def _settings(self, command: dict) -> None:
+        """Отдать настройки приложению: окно рисует по ним форму."""
+        self.emit(self._settings_report(command.get("id")))
+
+    def _settings_set(self, command: dict) -> None:
+        """Записать изменённые настройки в config.toml и применить их.
+
+        Файл правится по одному значению, а не пишется заново: в нём живут
+        комментарии к каждому параметру, и тот, кто правит его руками, должен
+        находить файл прежним.
+        """
+        request_id = command.get("id")
+        changes = command.get("values")
+        if not isinstance(changes, dict) or not all(
+            isinstance(values, dict) for values in changes.values()
+        ):
+            self.emit({
+                "event": "error",
+                "id": request_id,
+                "message": "Настройки передаются разделами: {\"paths\": {\"out\": \"…\"}}",
+            })
+            return
+
+        unknown = [name for name in changes if name not in config.DEFAULTS]
+        if unknown:
+            self.emit({
+                "event": "error",
+                "id": request_id,
+                "message": f"Неизвестные разделы настроек: {', '.join(unknown)}",
+            })
+            return
+
+        path = Path(self.cfg.source) if self.cfg.source else config.config_path()
+        config.ensure_config(path)
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        updated = settings.apply(text, changes)
+
+        # Настройки пишутся через запасной файл: оборвись запись на середине,
+        # пользователь остался бы без единственного файла с путями и моделью.
+        if text:
+            path.with_suffix(".toml.bak").write_text(text, encoding="utf-8")
+        temporary = path.with_suffix(".toml.new")
+        temporary.write_text(updated, encoding="utf-8")
+        temporary.replace(path)
+
+        self.cfg = config.load(path)
+        if "transcribe" in changes:
+            # Модель уже в видеопамяти, а её выбор мог поменяться — перезагрузим
+            # при следующей записи, а не будем распознавать не тем, что выбрано.
+            self._release_transcriber()
+
+        self.emit({"event": "log", "id": request_id, "text": f"Настройки сохранены: {path}"})
+        self.emit(self._settings_report(request_id))
+
+    def _settings_report(self, request_id: Any) -> dict:
+        """Настройки в виде данных: значения как в файле и куда они указывают."""
+        return {
+            "event": "settings",
+            "id": request_id,
+            "path": str(self.cfg.source or config.config_path()),
+            "values": json.loads(json.dumps(self.cfg.data, ensure_ascii=False, default=str)),
+            # Относительный путь в файле — обычное дело; окну нужно показать,
+            # где файлы окажутся на самом деле.
+            "resolved": {key: str(self.cfg.path(key)) for key in ("recordings", "out")},
+        }
+
+    def _release_transcriber(self) -> None:
+        transcriber, self._transcriber = self._transcriber, None
+        if transcriber is not None:
+            try:
+                transcriber.release()
+            except Exception:  # noqa: BLE001 — освобождение памяти не должно ронять ядро
+                pass
 
     def _doctor(self, command: dict) -> None:
         """Состояние окружения — в виде данных, чтобы приложение показало его само."""
