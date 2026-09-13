@@ -37,4 +37,7 @@ jobs:
           dotnet-version: "9.0.x"
 
       - name: Тесты
-        run: dotnet test app/Callsum.sln --nologo -v q
+        # Только проект тестов: приложение WinUI тянет Windows App SDK
+        # на сотни мегабайт, а проверять в нём пока нечего — разметка
+        # и связка с OBS проверяются на живой машине.
+        run: dotnet test app/Callsum.Obs.Tests/Callsum.Obs.Tests.csproj --nologo -v q
