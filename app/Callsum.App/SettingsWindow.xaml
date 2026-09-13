@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Callsum.App.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="20" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            x:Name="Source"
+            Grid.Row="0"
+            Opacity="0.6"
+            FontSize="12"
+            TextWrapping="Wrap"
+            IsTextSelectionEnabled="True"
+            Text="Читаю настройки…" />
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <!-- Форма выключена, пока настройки не прочитаны: править нечего. -->
+            <ContentControl
+                x:Name="Form"
+                IsEnabled="False"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="16">
+
+                <TextBlock Text="Папки" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Записи созвонов" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="Recordings" Grid.Column="0" />
+                        <Button
+                            Grid.Column="1"
+                            Content="Обзор…"
+                            Tag="Recordings"
+                            Click="OnBrowseClick" />
+                    </Grid>
+                    <TextBlock
+                        x:Name="RecordingsHint"
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Расшифровки и протоколы" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="Out" Grid.Column="0" />
+                        <Button Grid.Column="1" Content="Обзор…" Tag="Out" Click="OnBrowseClick" />
+                    </Grid>
+                    <TextBlock x:Name="OutHint" Opacity="0.6" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <TextBlock Text="Имена" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Папка одного созвона" />
+                    <TextBox x:Name="FolderTemplate" />
+                    <TextBlock
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="Подстановки: {name} — имя файла записи, {date} — ГГГГ-ММ-ДД, {time} — ЧЧ-ММ-СС, {datetime} — то и другое." />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Файл записи в OBS" />
+                    <TextBox x:Name="FilenameFormat" />
+                    <TextBlock
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="Синтаксис OBS: %CCYY год, %MM месяц, %DD день, %hh часы, %mm минуты, %ss секунды. Применится при следующей настройке профиля OBS." />
+                </StackPanel>
+
+                <TextBlock Text="Распознавание" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Модель" />
+                    <TextBox x:Name="WhisperModel" />
+                    <TextBlock
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="large-v3 точнее, medium и small быстрее. Новая модель скачается при первом запуске распознавания." />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Язык" />
+                    <TextBox x:Name="Language" />
+                    <TextBlock
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="Пусто — определять самому. Для созвонов на русском лучше оставить ru: автоопределение иногда ошибается на первых секундах." />
+                </StackPanel>
+
+                <TextBlock Text="Протокол" FontWeight="SemiBold" />
+
+                <ToggleSwitch
+                    x:Name="SummaryEnabled"
+                    Header="Составлять протокол после расшифровки"
+                    OnContent="Да"
+                    OffContent="Нет" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Адрес Ollama" />
+                    <TextBox x:Name="SummaryHost" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Модель протокола" />
+                    <TextBox x:Name="SummaryModel" />
+                    <TextBlock
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="Модель должна быть уже загружена в Ollama: ollama pull qwen3:14b" />
+                </StackPanel>
+
+                <TextBlock Text="Чем открывать" FontWeight="SemiBold" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Программа для протоколов и расшифровок" />
+                    <TextBox x:Name="MarkdownApp" />
+                    <TextBlock
+                        Opacity="0.6"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Text="Пусто — чем Windows открывает .md. Можно указать программу (notepad++), путь к ней, команду с подстановкой (code -r {file}) или ссылку (obsidian://open?path={file})." />
+                </StackPanel>
+            </StackPanel>
+            </ContentControl>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock
+                x:Name="Status"
+                Grid.Column="0"
+                VerticalAlignment="Center"
+                TextWrapping="Wrap"
+                Opacity="0.8" />
+
+            <Button x:Name="Save" Grid.Column="1" Content="Сохранить" IsEnabled="False" Click="OnSaveClick" />
+            <Button Grid.Column="2" Content="Закрыть" Click="OnCloseClick" />
+        </Grid>
+    </Grid>
+</Window>

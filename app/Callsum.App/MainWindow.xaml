@@ -19,12 +19,21 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Состояние связи с OBS: видно сразу, без раскрытия журнала. -->
-        <TextBlock
-            x:Name="ObsStatus"
-            Grid.Row="0"
-            Text="OBS: подключаюсь…"
-            Opacity="0.6" />
+        <Grid Grid.Row="0">
+            <!-- Состояние связи с OBS: видно сразу, без раскрытия журнала. -->
+            <TextBlock
+                x:Name="ObsStatus"
+                VerticalAlignment="Center"
+                Text="OBS: подключаюсь…"
+                Opacity="0.6" />
+
+            <HyperlinkButton
+                x:Name="OpenSettings"
+                HorizontalAlignment="Right"
+                Padding="4,0"
+                Content="Настройки"
+                Click="OnSettingsClick" />
+        </Grid>
 
         <Button
             x:Name="RecordButton"
