@@ -20,7 +20,9 @@ jobs:
       - name: Установка зависимостей
         # Только то, что нужно тестам: faster-whisper с библиотеками CUDA весит
         # гигабайты, а в тестах не участвует — модель распознавания подменена.
-        run: pip install pytest PySide6-Essentials websocket-client
+        # tqdm ставится отдельно: он крошечный, а на нём держится полоса
+        # скачивания модели, и проверять её надо.
+        run: pip install pytest PySide6-Essentials websocket-client tqdm
 
       - name: Тесты
         run: python -m pytest tests -q
