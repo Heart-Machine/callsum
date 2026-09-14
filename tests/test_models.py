@@ -42,7 +42,9 @@ def test_already_downloaded_model_is_not_fetched_again(cfg, monkeypatch):
 
     assert models.ensure(cfg, said.append) == "D:/модель"
     assert [call["local_files_only"] for call in utils.calls] == [True]
-    assert said == [], "о готовой модели говорить нечего"
+    # Сказать, что модель взята из кэша, нужно: иначе о судьбе трёх гигабайт
+    # человек узнаёт только по тому, бегут мегабайты под таймером или нет.
+    assert said == ["Модель large-v3 на месте: D:/модель"]
 
 
 def test_missing_model_is_downloaded_and_announced(cfg, monkeypatch):

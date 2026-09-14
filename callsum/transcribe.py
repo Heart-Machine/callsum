@@ -92,9 +92,16 @@ class Segment:
 class Transcriber:
     """Обёртка над моделью Whisper: грузится один раз, работает по всем дорожкам."""
 
-    def __init__(self, cfg, verbose: bool = True, on_progress=None):
+    #: Кому рассказывать о происходящем; None — печатать, если verbose.
+    say = None
+
+    def __init__(self, cfg, verbose: bool = True, on_progress=None, log=None):
         self.cfg = cfg
         self.verbose = verbose
+        # Кому рассказывать о происходящем. Из командной строки — печатью,
+        # из приложения — событиями в окно: там эти строки и нужны, иначе
+        # человек видит бегущие мегабайты и не знает, что это.
+        self.say = log
         tr = cfg.transcribe
         device, compute = self._resolve_device(tr["device"], tr["compute_type"])
         if device == "cuda":
@@ -114,7 +121,7 @@ class Transcriber:
         # Дальше модель грузится уже с диска — по готовому пути, без сети.
         weights = models.ensure(cfg, self._log, _stage(on_progress, "model"))
         name = weights or tr["model"]
-        self._log(f"Загружаю модель {tr['model']} ({device}/{compute})…")
+        self._log(f"Загружаю модель {tr['model']} в видеопамять ({device}/{compute})…")
         try:
             self.model = self._load(WhisperModel, name, kwargs)
         except Exception as exc:  # noqa: BLE001
@@ -155,7 +162,9 @@ class Transcriber:
         return device, compute
 
     def _log(self, msg: str) -> None:
-        if self.verbose:
+        if self.say is not None:
+            self.say(msg)
+        elif self.verbose:
             print(msg, flush=True)
 
     def release(self) -> None:
