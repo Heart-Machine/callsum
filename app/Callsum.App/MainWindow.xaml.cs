@@ -336,7 +336,7 @@ public sealed partial class MainWindow : Window
 
         // О сохранении в журнал пишет само ядро — второй раз повторять незачем,
         // а папки окно обновит по событию с настройками.
-        var window = new SettingsWindow(_engine, _obs);
+        var window = new SettingsWindow(_engine, _obs, _updates, () => _recordingSince is not null);
         window.Closed += (_, _) => _settings = null;
         _settings = window;
         window.Activate();

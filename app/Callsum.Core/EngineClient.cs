@@ -64,6 +64,20 @@ public sealed class EngineClient : IAsyncDisposable
     public Task<string> DoctorAsync(CancellationToken cancellationToken = default)
         => SendAsync(new { cmd = "doctor" }, cancellationToken);
 
+    /// <summary>Проверить окружение и дождаться отчёта.</summary>
+    public Task<EngineEvent.Doctor> GetDoctorAsync(CancellationToken cancellationToken = default)
+        => AskAsync<EngineEvent.Doctor>(new { cmd = "doctor" }, cancellationToken);
+
+    /// <summary>
+    /// Спросить, какие модели установлены в Ollama.
+    ///
+    /// Адрес передаётся свой, когда его только что поменяли в окне: список
+    /// должен относиться к тому, что человек вписал, а не к сохранённому.
+    /// </summary>
+    public Task<EngineEvent.Models> GetOllamaModelsAsync(
+        string? host = null, CancellationToken cancellationToken = default)
+        => AskAsync<EngineEvent.Models>(new { cmd = "models", host }, cancellationToken);
+
     /// <summary>Спросить настройки и дождаться ответа.</summary>
     public Task<EngineEvent.Settings> GetSettingsAsync(CancellationToken cancellationToken = default)
         => AskAsync<EngineEvent.Settings>(new { cmd = "settings" }, cancellationToken);

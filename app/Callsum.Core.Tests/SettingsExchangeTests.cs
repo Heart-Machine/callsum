@@ -9,10 +9,14 @@ public class SettingsExchangeTests
     {"event": "settings", "id": "1", "path": "C:/Users/User/AppData/Roaming/callsum/config.toml",
      "values": {"paths": {"out": "out", "folder_template": "{name}"},
                 "summary": {"model": "qwen3:14b", "num_ctx": 8192, "enabled": true},
+                "audio": {"extensions": [".mkv", ".mp4"]},
                 "transcribe": {"vad": false}},
      "resolved": {"recordings": "D:/rec", "out": "D:/out"},
-     "defaults": {"recordings": "C:/Users/User/callsum/recordings",
-                  "out": "C:/Users/User/callsum/out"}}
+     "defaults": {"paths": {"recordings": "C:/Users/User/callsum/recordings",
+                            "out": "C:/Users/User/callsum/out"},
+                  "summary": {"num_ctx": 8192, "keep_alive": "0s"},
+                  "transcribe": {"vad": true},
+                  "audio": {"extensions": [".mkv", ".mp4", ".mka"]}}}
     """;
 
     [Fact]
@@ -26,6 +30,7 @@ public class SettingsExchangeTests
         Assert.Equal(8192, message.Number("summary", "num_ctx"));
         Assert.True(message.Flag("summary", "enabled"));
         Assert.False(message.Flag("transcribe", "vad"));
+        Assert.Equal([".mkv", ".mp4"], message.List("audio", "extensions"));
     }
 
     [Fact]
@@ -50,6 +55,29 @@ public class SettingsExchangeTests
     }
 
     [Fact]
+    public void Умолчание_приходит_к_каждой_настройке()
+    {
+        // Подсказка нужна не только у папок: человеку, который добрался до
+        // «Дополнительно», важно знать, от чего он отступает.
+        var message = Assert.IsType<EngineEvent.Settings>(EngineEvent.Parse(Report));
+
+        Assert.Equal("8192", message.DefaultText("summary", "num_ctx"));
+        Assert.Equal("0s", message.DefaultText("summary", "keep_alive"));
+        Assert.Equal("да", message.DefaultText("transcribe", "vad"));
+        Assert.Equal(".mkv, .mp4, .mka", message.DefaultText("audio", "extensions"));
+        Assert.Equal("", message.DefaultText("summary", "model"));
+    }
+
+    [Fact]
+    public void Список_моделей_Ollama_разбирается()
+    {
+        var message = Assert.IsType<EngineEvent.Models>(EngineEvent.Parse(
+            """{"event": "models", "id": "6", "models": ["qwen3:14b", "llama3:8b"]}"""));
+
+        Assert.Equal(["qwen3:14b", "llama3:8b"], message.Names);
+    }
+
+    [Fact]
     public void Отсутствующее_значение_не_ломает_окно()
     {
         var message = Assert.IsType<EngineEvent.Settings>(EngineEvent.Parse(
@@ -60,6 +88,7 @@ public class SettingsExchangeTests
         Assert.False(message.Flag("summary", "enabled"));
         Assert.Equal("", message.ResolvedPath("out"));
         Assert.Equal("", message.DefaultPath("out"));
+        Assert.Empty(message.List("audio", "extensions"));
     }
 
     [Fact]

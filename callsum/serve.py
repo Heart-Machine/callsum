@@ -12,6 +12,7 @@
     {"cmd": "doctor",    "id": "3"}
     {"cmd": "settings",  "id": "4"}
     {"cmd": "settings_set", "id": "5", "values": {"paths": {"out": "D:/созвоны"}}}
+    {"cmd": "models",    "id": "6", "host": "http://127.0.0.1:11434"}
     {"cmd": "shutdown"}
 
 События:
@@ -22,6 +23,7 @@
     {"event": "done",     "id": "1", "out_dir": "…", "summary": true}
     {"event": "error",    "id": "1", "message": "…"}
     {"event": "settings", "id": "4", "path": "…/config.toml", "values": {…}, "resolved": {…}}
+    {"event": "models",   "id": "6", "models": ["qwen3:14b", …]}
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-from . import __version__, audio, config, cuda, naming, settings, summarize
+from . import __version__, audio, config, cuda, models, naming, settings, summarize
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -94,6 +96,7 @@ class Engine:
             "doctor": self._doctor,
             "settings": self._settings,
             "settings_set": self._settings_set,
+            "models": self._models,
         }.get(str(name))
         if handler is None:
             self.emit({
@@ -179,6 +182,24 @@ class Engine:
             "event": "done", "id": request_id, "out_dir": str(target.parent), "summary": True,
         })
 
+    def _models(self, command: dict) -> None:
+        """Какие модели установлены в Ollama.
+
+        Окно настроек предлагает выбрать из них, а не заставляет вспоминать имя:
+        модель, которой в Ollama нет, означала бы ошибку вместо протокола.
+        Адрес можно передать свой — в окне его меняют рядом, и список должен
+        относиться к тому, что человек только что вписал.
+        """
+        request_id = command.get("id")
+        host = str(command.get("host") or self.cfg.summary["host"])
+        try:
+            installed = summarize.available_models(host)
+        except summarize.OllamaError as exc:
+            self.emit({"event": "error", "id": request_id, "message": str(exc)})
+            return
+
+        self.emit({"event": "models", "id": request_id, "models": installed})
+
     # --- настройки ----------------------------------------------------
     def _settings(self, command: dict) -> None:
         """Отдать настройки приложению: окно рисует по ним форму."""
@@ -244,13 +265,23 @@ class Engine:
             # Относительный путь в файле — обычное дело; окну нужно показать,
             # где файлы окажутся на самом деле.
             "resolved": {key: str(self.cfg.path(key)) for key in ("recordings", "out")},
-            # Куда программа сложила бы всё сама: окно показывает это подсказкой,
-            # чтобы человек видел, от чего он отказывается, выбирая свою папку.
-            "defaults": {
-                key: str(config.data_dir() / config.DEFAULTS["paths"][key])
-                for key in ("recordings", "out")
-            },
+            # Что стоит в настройках по умолчанию: окно показывает это
+            # подсказкой у каждого поля, чтобы человек видел, от чего он
+            # отказывается, вписывая своё.
+            "defaults": self._defaults(),
         }
+
+    @staticmethod
+    def _defaults() -> dict:
+        """Значения по умолчанию, разделами — как и сами настройки.
+
+        Папки подставляются полными путями: в примере они записаны относительно
+        корня проекта, а подсказка должна называть настоящую папку.
+        """
+        defaults = {section: dict(values) for section, values in config.DEFAULTS.items()}
+        for key in ("recordings", "out"):
+            defaults["paths"][key] = str(config.data_dir() / config.DEFAULTS["paths"][key])
+        return defaults
 
     def _release_transcriber(self) -> None:
         transcriber, self._transcriber = self._transcriber, None
@@ -283,10 +314,11 @@ class Engine:
         host = self.cfg.summary["host"]
         wanted = str(self.cfg.summary["model"])
         try:
-            models = summarize.available_models(host)
+            installed = summarize.available_models(host)
             report["ollama"] = True
             report["model"] = any(
-                m == wanted or m.startswith(wanted.split(":")[0] + ":") for m in models
+                name == wanted or name.startswith(wanted.split(":")[0] + ":")
+                for name in installed
             )
         except summarize.OllamaError as exc:
             report["ollama"] = False
@@ -296,6 +328,13 @@ class Engine:
         # Чем открывать протоколы, решает пользователь в config.toml. Настройки
         # читает ядро, поэтому приложение узнаёт её отсюда же, вместе с путями.
         report["markdown_app"] = str(self.cfg.view.get("markdown_app", ""))
+
+        # Куда что скачано и откуда читаются настройки — это показывает вкладка
+        # «О программе». Знает об этом ядро: папки зависят от того, собрано оно
+        # в exe или запущено из исходников.
+        report["version"] = __version__
+        report["cuda_dir"] = str(cuda.target_dir())
+        report["model_dir"] = str(models.model_dir(self.cfg) or "")
 
         # Папки заводим сразу: приложению нужно знать готовые пути, а не
         # разбираться, чего ещё не хватает.
