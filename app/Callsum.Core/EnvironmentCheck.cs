@@ -27,7 +27,18 @@ public static class EnvironmentCheck
     {
         var found = new List<EnvironmentWarning>();
 
-        if (!doctor.Ffmpeg)
+        if (!doctor.Ffmpeg && doctor.FfmpegWillDownload)
+        {
+            // Это не поломка: программа донесёт его сама перед первой
+            // обработкой. Сказать стоит, чтобы сотня мегабайт не стала
+            // неожиданностью в тот момент, когда человек ждёт расшифровку.
+            found.Add(new EnvironmentWarning(
+                WarningLevel.Note,
+                "FFmpeg приедет при первой обработке",
+                "Им извлекаются дорожки из записи. Это около 110 МБ, один раз на машину — "
+                + "ставить его руками не нужно."));
+        }
+        else if (!doctor.Ffmpeg)
         {
             found.Add(new EnvironmentWarning(
                 WarningLevel.Problem,

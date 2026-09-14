@@ -10,6 +10,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import ffmpeg as ffmpeg_tools
+
 # Сколько ждать признаков работы, прежде чем считать ffmpeg зависшим.
 # Извлечение дорожки идёт примерно в две тысячи раз быстрее реального времени
 # (двадцать минут записи — половина секунды), так что три минуты молчания —
@@ -131,7 +133,8 @@ def _run_probe(cmd: list[str], *, what: str) -> str:
 
 
 def _tool(name: str) -> str:
-    exe = shutil.which(name)
+    # Сначала своя копия: программа доносит FFmpeg сама, если в системе его нет.
+    exe = ffmpeg_tools.found(name)
     if not exe:
         raise FFmpegMissing(
             f"Не найден {name}. Установите FFmpeg и добавьте его в PATH: winget install Gyan.FFmpeg"

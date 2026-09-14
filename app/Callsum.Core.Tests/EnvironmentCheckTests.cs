@@ -43,6 +43,21 @@ public class EnvironmentCheckTests
     }
 
     [Fact]
+    public void Отсутствующий_FFmpeg_который_приедет_сам_не_пугает()
+    {
+        // Программа донесёт его перед первой обработкой: это не поломка,
+        // а предупреждение о сотне мегабайт.
+        var found = EnvironmentCheck.Read(Report(
+            Healthy.Replace("\"ffmpeg\": true", "\"ffmpeg\": false")
+            + """, "ffmpeg_will_download": true """));
+
+        var warning = Assert.Single(found);
+        Assert.Equal(WarningLevel.Note, warning.Level);
+        Assert.Contains("приедет", warning.Title);
+        Assert.DoesNotContain("winget", warning.What);
+    }
+
+    [Fact]
     public void Молчащая_Ollama_не_скрывает_что_расшифровка_получится()
     {
         var found = EnvironmentCheck.Read(Report(

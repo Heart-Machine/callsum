@@ -184,7 +184,8 @@ public sealed partial class MainWindow : Window
     {
         // Подробность уточняет стадию там, где она о чём-то говорит: кого
         // распознаём сейчас и сколько мегабайт уже скачано.
-        var detailed = progress.Stage is EngineStage.Transcribe or EngineStage.Download or EngineStage.Model;
+        var detailed = progress.Stage is EngineStage.Transcribe or EngineStage.Download
+                              or EngineStage.Model or EngineStage.Ffmpeg;
         Stage.Text = detailed && progress.Detail is { Length: > 0 } detail
             ? $"{EngineStage.Describe(progress.Stage)}: {detail}"
             : EngineStage.Describe(progress.Stage);
