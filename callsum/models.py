@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from pathlib import Path
 from typing import Callable
@@ -118,10 +119,11 @@ def ensure(cfg, log: Log | None = None, on_progress: Progress | None = None) -> 
     folder = model_dir(cfg)
     cache = str(folder) if folder else None
 
+    _no_symlinks()
     faster_whisper_utils = _import_utils()
 
     cached = _cached(faster_whisper_utils, name, cache)
-    if cached is not None:
+    if cached is not None and _ready(cached, say):
         return cached
 
     say(f"Скачиваю модель распознавания {name} — это бывает один раз на машине.")
@@ -138,6 +140,83 @@ def ensure(cfg, log: Log | None = None, on_progress: Progress | None = None) -> 
             "Проверьте связь с интернетом и попробуйте ещё раз."
         )
         return None
+
+
+def _no_symlinks() -> None:
+    """Запретить Hugging Face складывать кэш из символических ссылок.
+
+    По умолчанию он кладёт файлы в blobs, а в снимок модели ставит ссылки на
+    них. Windows позволяет такие ссылки создать, но не всегда позволяет по ним
+    ходить: в %LOCALAPPDATA% на проверочной машине ссылка создаётся, а открыть
+    её нельзя — «не найден путь». Проверка самого Hugging Face этого не ловит:
+    она только пробует ссылку создать. В итоге три скачанных гигабайта
+    оказывались нечитаемыми, а распознавание падало на «Unable to open file
+    model.bin».
+
+    Без ссылок он кладёт скачанное сразу на место — лишнего места это не
+    занимает.
+    """
+    os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
+    try:
+        from huggingface_hub import constants
+    except ImportError:
+        # Настройка через переменную окружения сработает при следующем запуске.
+        return
+
+    # Переменную окружения он читает один раз, при импорте, а импортируют его
+    # задолго до первого скачивания — поэтому правим и то, что уже прочитано.
+    constants.HF_HUB_DISABLE_SYMLINKS = True
+
+
+def _ready(folder: str, say: Log) -> bool:
+    """Годится ли то, что нашлось в кэше, или его надо чинить."""
+    broken = _broken(Path(folder))
+    if not broken:
+        return True
+
+    say("Модель на месте, но кэш собран из ссылок, по которым Windows не ходит. Чиню…")
+    return _repair(broken, say)
+
+
+def _broken(folder: Path) -> list[Path]:
+    """Ссылки, по которым нельзя пройти, — при живом содержимом."""
+    try:
+        entries = list(folder.iterdir())
+    except OSError:
+        # Папки нет или её не прочитать — чинить нечего, пусть решает вызывающий.
+        return []
+
+    broken = []
+    for entry in entries:
+        if not entry.is_symlink():
+            continue
+        try:
+            entry.stat()
+        except OSError:
+            broken.append(entry)
+    return broken
+
+
+def _repair(broken: list[Path], say: Log) -> bool:
+    """Подставить содержимое на место ссылки.
+
+    Содержимое никуда не делось — оно лежит в blobs, — поэтому качать заново
+    не нужно: файл просто переставляется туда, куда указывала ссылка.
+    """
+    for link in broken:
+        target = Path(os.path.normpath(link.parent / os.readlink(link)))
+        if not target.exists():
+            say(f"Не нашёл содержимое для {link.name} — скачаю модель заново.")
+            return False
+        try:
+            link.unlink()
+            os.replace(target, link)
+        except OSError as exc:
+            say(f"Не вышло починить {link.name}: {exc}. Скачаю модель заново.")
+            return False
+
+    say("Кэш модели починен, скачивать заново не нужно")
+    return True
 
 
 def _import_utils():

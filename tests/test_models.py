@@ -1,6 +1,7 @@
 """Тесты скачивания модели распознавания: без сети, на подделках."""
 
 import types
+from pathlib import Path
 
 import pytest
 
@@ -117,3 +118,69 @@ def test_only_byte_counters_are_taken(monkeypatch):
     bytes_bar = watcher(total=1_000_000, unit="B")
     bytes_bar.update(250_000)
     assert seen and seen[-1][0] == pytest.approx(0.25)
+
+
+# --- кэш из символических ссылок -------------------------------------------
+@pytest.fixture
+def links(tmp_path):
+    """Папка со ссылкой на содержимое — как устроен кэш Hugging Face."""
+    try:
+        (tmp_path / "проба").symlink_to(tmp_path / "нет-такого")
+    except OSError:
+        pytest.skip("на этой машине ссылки не создаются")
+
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    blobs = tmp_path / "blobs"
+    blobs.mkdir()
+    (blobs / "0123456789").write_bytes(b"model")
+    return snapshot, blobs
+
+
+def test_symlinks_are_forbidden_before_downloading(cfg, monkeypatch):
+    """Иначе три скачанных гигабайта окажутся нечитаемыми на ровном месте."""
+    monkeypatch.delenv("HF_HUB_DISABLE_SYMLINKS", raising=False)
+    monkeypatch.setattr(models, "_import_utils", lambda: FakeUtils(cached=True))
+
+    models.ensure(cfg)
+
+    assert models.os.environ["HF_HUB_DISABLE_SYMLINKS"] == "1"
+
+
+def test_content_takes_the_place_of_the_link(links):
+    """Содержимое лежит рядом: переставляем его, а не качаем три гигабайта."""
+    snapshot, blobs = links
+    link = snapshot / "model.bin"
+    link.symlink_to(Path("..") / "blobs" / "0123456789")
+
+    assert models._repair([link], lambda _: None) is True
+
+    assert link.read_bytes() == b"model"
+    assert not link.is_symlink(), "на месте ссылки должен лежать сам файл"
+    assert not (blobs / "0123456789").exists(), "второй копии на диске быть не должно"
+
+
+def test_working_link_is_not_touched(links):
+    """Чинить нечего там, где всё открывается: на большинстве машин так и есть."""
+    snapshot, _ = links
+    link = snapshot / "model.bin"
+    link.symlink_to(Path("..") / "blobs" / "0123456789")
+
+    assert models._broken(snapshot) == []
+
+
+def test_repair_without_content_asks_to_download_again(links):
+    snapshot, _ = links
+    link = snapshot / "model.bin"
+    link.symlink_to(Path("..") / "blobs" / "нет-такого")
+
+    assert models._broken(snapshot) == [link], "битая ссылка должна находиться"
+
+    said: list[str] = []
+    assert models._repair([link], said.append) is False
+    assert "скачаю модель заново" in said[0].lower()
+
+
+def test_unreadable_folder_does_not_look_broken(tmp_path):
+    """Кэш может лежать где угодно; неизвестное не объявляем сломанным."""
+    assert models._broken(tmp_path / "нет такой папки") == []
