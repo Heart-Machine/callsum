@@ -169,6 +169,56 @@ def test_transcriber_explains_itself_in_the_window(cfg, tmp_path, monkeypatch):
     assert any("Модель загружена" in line for line in said), said
 
 
+def test_transcriber_speaks_for_the_record_it_is_working_on(cfg, tmp_path, monkeypatch):
+    """Строки распознавателя относятся к той записи, которую он сейчас разбирает.
+
+    Распознаватель создаётся один раз и живёт до конца работы: модель грузится
+    в видеопамять секунды. Вместе с ним запоминался и номер задания — номер
+    первой записи, — поэтому всё сказанное про вторую и следующие уходило
+    в окно под чужим номером.
+    """
+    sources = []
+    for name in ("первый", "второй"):
+        source = tmp_path / "rec" / f"{name}.mkv"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes(b"")
+        sources.append(source)
+
+    class FakeTranscriber:
+        def __init__(self, cfg_, verbose=True, on_progress=None, log=None):
+            self.say = log
+            self.device, self.compute_type = "cpu", "int8"
+
+        @staticmethod
+        def _resolve_device(device, compute):
+            return "cpu", "int8"
+
+    class FakeResult:
+        def __init__(self, out_dir):
+            self.out_dir = out_dir
+            self.summary_md = out_dir / "summary.md"
+
+    def fake_process(src, config_, transcriber=None, log=print, on_stage=None, **kwargs):
+        # Так о себе отчитывается настоящий: через свой log, а не через log пайплайна.
+        transcriber.say(f"  [Я] готово: {src.stem}")
+        out_dir = cfg.path("out") / src.stem
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return FakeResult(out_dir)
+
+    monkeypatch.setattr(serve_module, "Transcriber", FakeTranscriber)
+    monkeypatch.setattr(serve_module, "process", fake_process)
+
+    events = run(
+        cfg,
+        {"cmd": "process", "id": "1", "path": str(sources[0])},
+        {"cmd": "process", "id": "2", "path": str(sources[1])},
+    )
+
+    said = {e["text"]: e["id"] for e in events if e["event"] == "log"}
+    assert said["  [Я] готово: первый"] == "1"
+    assert said["  [Я] готово: второй"] == "2", said
+
+
 def test_summarize_without_transcript_is_an_error(cfg, tmp_path):
     events = run(cfg, {"cmd": "summarize", "id": "4", "transcript": str(tmp_path / "нет")})
     error = next(e for e in events if e["event"] == "error")

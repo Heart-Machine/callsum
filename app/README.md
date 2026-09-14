@@ -231,8 +231,8 @@ packaging\set-version.ps1 1.1.0
 git switch main; git pull
 git tag -a v1.1.0 -m "callsum 1.1.0"
 git push origin v1.1.0
-packaginguild-core.cmd
-packaginguild-app.cmd
+packaging\build-core.cmd
+packaging\build-app.cmd
 ```
 
 Предрелиз (`1.1.0-rc.1`) помечается на GitHub как pre-release: обновления приложение ищет
