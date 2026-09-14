@@ -420,6 +420,51 @@ public sealed partial class SettingsWindow : Window
         });
     }
 
+    /// <summary>
+    /// Настроить OBS заново — по сохранённым настройкам, а не по набранным.
+    ///
+    /// Настроив OBS по значению, которое набрано, но не сохранено, мы развели бы
+    /// программу и OBS по разным папкам: записи уходили бы туда, где их никто
+    /// не ищет. Это уже случалось, и чинить это дороже, чем попросить сохранить.
+    /// </summary>
+    private async void OnSetUpObsClick(object sender, RoutedEventArgs args)
+    {
+        if (_loaded is not { } settings)
+        {
+            return;
+        }
+
+        var folder = settings.ResolvedPath("recordings");
+        var format = settings.Text("obs", "filename_format");
+        if (Recordings.Text.Trim() != folder || FilenameFormat.Text.Trim() != format)
+        {
+            Status.Text = "Сначала сохраните настройки: OBS настраивается по сохранённым "
+                          + "папке записей и имени файла";
+            return;
+        }
+
+        SetUpObs.IsEnabled = false;
+        Status.Text = "Настраиваю OBS — это занимает около полминуты…";
+        try
+        {
+            // Ход работы уходит в журнал главного окна: связь с OBS у окон общая.
+            if (await _obs.SetUpAsync(folder, format) is { Length: > 0 } error)
+            {
+                Status.Text = error;
+                return;
+            }
+
+            Status.Text = $"OBS настроен, записи пойдут в {folder}";
+            // Источники появились только что — теперь есть о чём спросить список
+            // устройств, который до этого был пуст.
+            await LoadDevicesAsync();
+        }
+        finally
+        {
+            SetUpObs.IsEnabled = true;
+        }
+    }
+
     /// <summary>Выбранные устройства, если их поменяли.</summary>
     private List<(string Input, ObsDevice Device)> CollectDevices()
     {
