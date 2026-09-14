@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import config, naming, summarize, watch
+from . import certs, config, naming, summarize, watch
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -258,6 +258,9 @@ def _report_config_error(message: str, graphical: bool) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     _utf8_console()
+    # Антивирус или прокси могут подменять сертификаты: корни Windows знают
+    # об этом, а список certifi — нет.
+    certs.ensure()
     args = build_parser().parse_args(argv)
     try:
         cfg = config.load(args.config)

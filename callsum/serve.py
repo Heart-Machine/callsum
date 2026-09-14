@@ -36,7 +36,9 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-from . import __version__, audio, config, cuda, ffmpeg, models, naming, settings, summarize
+from . import (
+    __version__, audio, certs, config, cuda, ffmpeg, models, naming, settings, summarize,
+)
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -458,6 +460,10 @@ def serve(cfg, lines: Iterable[str] | None = None, write: Callable[[str], None] 
     def emit(message: dict) -> None:
         with lock:
             write(json.dumps(message, ensure_ascii=False))
+
+    # Корни Windows — до первого сетевого обращения и до импорта тех, кто
+    # читает переменные окружения при загрузке.
+    certs.ensure()
 
     device, compute_type = Transcriber._resolve_device(
         cfg.transcribe["device"], cfg.transcribe["compute_type"]
