@@ -22,11 +22,17 @@ def cfg(tmp_path):
 
 @pytest.fixture(autouse=True)
 def no_gpu_probe(monkeypatch):
-    """Тесты не должны трогать видеокарту и грузить модель."""
+    """Тесты не должны трогать видеокарту, грузить модель и качать FFmpeg.
+
+    Про FFmpeg отдельно: на машине автопрогона его нет, и обработка честно
+    полезла его скачивать — сто мегабайт посреди тестов. Своя докачка проверена
+    в test_ffmpeg.py, здесь она только мешает.
+    """
     monkeypatch.setattr(
         serve_module.Transcriber, "_resolve_device",
         staticmethod(lambda device, compute: ("cpu", "int8")),
     )
+    monkeypatch.setattr(serve_module.ffmpeg, "missing", lambda folder=None: [])
 
 
 def run(cfg, *commands):
@@ -114,9 +120,10 @@ def test_processing_reports_progress_and_result(cfg, tmp_path, monkeypatch):
     kinds = [e["event"] for e in events]
     assert "progress" in kinds and "log" in kinds
 
-    progress = next(e for e in events if e["event"] == "progress")
-    assert (progress["stage"], progress["fraction"], progress["detail"]) == (
-        "transcribe", 0.5, "Собеседник")
+    # Именно о распознавании: до него мотор может сообщить и о докачке.
+    progress = next(
+        e for e in events if e["event"] == "progress" and e["stage"] == "transcribe")
+    assert (progress["fraction"], progress["detail"]) == (0.5, "Собеседник")
 
     done = next(e for e in events if e["event"] == "done")
     assert done["summary"] is True
