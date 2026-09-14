@@ -57,6 +57,27 @@ public static class SettingValue
             .Distinct()];
 
     /// <summary>
+    /// Что показать в списке, чтобы выбранное было видно.
+    ///
+    /// Видимую часть редактируемого списка рисует выбранный пункт, а не текст:
+    /// значения, которого нет среди пунктов, человек не видит вовсе — поле
+    /// выглядит пустым, хотя значение в нём есть. Поэтому своё значение —
+    /// модель, которой нет в Ollama, язык, которого нет в нашем списке —
+    /// встаёт в начало списка.
+    /// </summary>
+    public static IReadOnlyList<string> Options(IEnumerable<string> options, string? chosen)
+    {
+        var written = (chosen ?? "").Trim();
+        var all = options.ToList();
+        if (written.Length > 0 && !all.Contains(written))
+        {
+            all.Insert(0, written);
+        }
+
+        return all;
+    }
+
+    /// <summary>
     /// Осталось ли значение прежним.
     ///
     /// Сравнение идёт по смыслу, а не по тексту: 8192 из файла и 8192 из

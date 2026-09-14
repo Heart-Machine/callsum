@@ -51,6 +51,27 @@ public class SettingValueTests
     }
 
     [Fact]
+    public void Своё_значение_попадает_в_список()
+    {
+        // Иначе поле показывало бы пустоту: видимую часть редактируемого списка
+        // рисует выбранный пункт, а не набранный текст.
+        Assert.Equal(
+            ["своя-модель", "large-v3", "medium"],
+            SettingValue.Options(["large-v3", "medium"], "своя-модель"));
+    }
+
+    [Fact]
+    public void Известное_значение_список_не_меняет()
+    {
+        Assert.Equal(
+            ["large-v3", "medium"], SettingValue.Options(["large-v3", "medium"], "medium"));
+        Assert.Equal(
+            ["large-v3", "medium"], SettingValue.Options(["large-v3", "medium"], ""));
+        Assert.Equal(
+            ["large-v3", "medium"], SettingValue.Options(["large-v3", "medium"], null));
+    }
+
+    [Fact]
     public void Значение_по_умолчанию_читается_словами()
     {
         Assert.Equal("8192", SettingValue.Describe(Json("8192")));

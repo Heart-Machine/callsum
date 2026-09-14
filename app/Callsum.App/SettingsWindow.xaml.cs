@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Reflection;
 using Callsum.Core;
 using Callsum.Obs;
@@ -39,6 +40,7 @@ public sealed partial class SettingsWindow : Window
     private readonly List<Setting> _fields = [];
     private readonly Dictionary<string, FrameworkElement> _pages = [];
 
+    private ChoiceSetting? _summaryModel;
     private EngineEvent.Settings? _loaded;
     private string _microphone = "";
     private string _systemAudio = "";
@@ -65,9 +67,6 @@ public sealed partial class SettingsWindow : Window
         _pages["summary"] = PageSummary;
         _pages["about"] = PageAbout;
 
-        WhisperModel.ItemsSource = WhisperModels;
-        Language.ItemsSource = Languages;
-        KeepAlive.ItemsSource = KeepAliveChoices;
         AboutVersion.Text = $"callsum {Version}";
 
         Describe();
@@ -105,9 +104,9 @@ public sealed partial class SettingsWindow : Window
         Number(StableSeconds, "audio", "stable_seconds", "Файл дописан, если не менялся", StableSecondsHint);
 
         On("transcribe");
-        Choice(WhisperModel, "transcribe", "model", "Модель", WhisperModelHint);
+        Choice(WhisperModel, "transcribe", "model", "Модель", WhisperModelHint, WhisperModels);
         // Пустой язык — это «определять самому», осмысленное значение.
-        Choice(Language, "transcribe", "language", "Язык", LanguageHint, required: false);
+        Choice(Language, "transcribe", "language", "Язык", LanguageHint, Languages, required: false);
         PathField(ModelDir, "transcribe", "model_dir", "Куда скачивать модель", ModelDirHint, required: false);
         Pick(Device, "transcribe", "device", "На чём считать", DeviceHint);
         Pick(ComputeType, "transcribe", "compute_type", "Точность вычислений", ComputeTypeHint);
@@ -127,11 +126,12 @@ public sealed partial class SettingsWindow : Window
         Flag(SummaryEnabled, "summary", "enabled");
         Line(SummaryHost, "summary", "host", "Адрес Ollama", SummaryHostHint);
         // Подсказка под моделью занята списком из Ollama, поэтому её нет здесь.
-        Choice(SummaryModel, "summary", "model", "Модель протокола", hint: null);
+        _summaryModel = Choice(SummaryModel, "summary", "model", "Модель протокола", hint: null);
         Number(NumCtx, "summary", "num_ctx", "Окно контекста", NumCtxHint);
         Number(Temperature, "summary", "temperature", "Температура", TemperatureHint, whole: false);
         Flag(Think, "summary", "think");
-        Choice(KeepAlive, "summary", "keep_alive", "Держать модель в видеопамяти", KeepAliveHint);
+        Choice(KeepAlive, "summary", "keep_alive", "Держать модель в видеопамяти", KeepAliveHint,
+               KeepAliveChoices);
         Number(ChunkChars, "summary", "chunk_chars", "Размер куска", ChunkCharsHint);
         Number(ChunkOverlap, "summary", "chunk_overlap_chars", "Нахлёст кусков", ChunkOverlapHint);
         Number(TimeoutSeconds, "summary", "timeout_seconds", "Сколько ждать ответа", TimeoutSecondsHint);
@@ -159,9 +159,19 @@ public sealed partial class SettingsWindow : Window
                         bool whole = true) =>
         _fields.Add(new NumberSetting(box, section, key, label, _tab, hint, whole));
 
-    private void Choice(ComboBox box, string section, string key, string label, TextBlock? hint,
-                        bool required = true) =>
-        _fields.Add(new ChoiceSetting(box, section, key, label, _tab, hint, required));
+    private ChoiceSetting Choice(
+        ComboBox box, string section, string key, string label, TextBlock? hint,
+        IEnumerable<string>? options = null, bool required = true)
+    {
+        var field = new ChoiceSetting(box, section, key, label, _tab, hint, required);
+        if (options is not null)
+        {
+            field.Fill(options);
+        }
+
+        _fields.Add(field);
+        return field;
+    }
 
     private void Pick(ComboBox box, string section, string key, string label, TextBlock? hint) =>
         _fields.Add(new PickSetting(box, section, key, label, _tab, hint));
@@ -479,10 +489,9 @@ public sealed partial class SettingsWindow : Window
     private void ShowModels(IReadOnlyList<string> names)
     {
         // Набранное не должно пропасть от того, что приехал список: модель
-        // могли вписать руками, пока он ехал.
-        var chosen = SummaryModel.Text;
-        SummaryModel.ItemsSource = names;
-        SummaryModel.Text = chosen;
+        // могли вписать руками, пока он ехал, а могла и не найтись в Ollama —
+        // и тогда её тем более нужно видеть.
+        _summaryModel?.Fill(names);
         SummaryModelHint.Text = names.Count > 0
             ? "Модели, загруженные в Ollama."
             : "В Ollama нет ни одной модели. Загрузить: ollama pull qwen3:14b";
@@ -769,19 +778,73 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>Список, из которого можно выбрать, но можно и вписать своё.</summary>
-    private sealed class ChoiceSetting(
-        ComboBox box, string section, string key, string label, string tab, TextBlock? hint, bool required)
-        : Setting(section, key, label, tab, hint)
+    private sealed class ChoiceSetting : Setting
     {
-        public override object? Written => box.Text.Trim();
+        private readonly ComboBox _box;
+        private readonly bool _required;
+        private readonly ObservableCollection<string> _options = [];
 
-        public override void Show(EngineEvent.Settings settings) =>
-            box.Text = settings.Text(Section, Key);
+        public ChoiceSetting(
+            ComboBox box, string section, string key, string label, string tab,
+            TextBlock? hint, bool required)
+            : base(section, key, label, tab, hint)
+        {
+            _box = box;
+            _required = required;
+            _box.ItemsSource = _options;
+        }
+
+        public override object? Written => _box.Text.Trim();
+
+        public override void Show(EngineEvent.Settings settings) => Select(settings.Text(Section, Key));
+
+        /// <summary>Заменить предлагаемые значения, оставив выбранное.</summary>
+        public void Fill(IEnumerable<string> options)
+        {
+            var chosen = _box.Text;
+            _options.Clear();
+            foreach (var option in SettingValue.Options(options, chosen))
+            {
+                _options.Add(option);
+            }
+
+            Select(chosen);
+        }
 
         public override string? Problem(EngineEvent.Settings settings) =>
-            Empty(box.Text.Trim(), required, Label);
+            Empty(_box.Text.Trim(), _required, Label);
 
-        public override void Focus() => box.Focus(FocusState.Programmatic);
+        public override void Focus() => _box.Focus(FocusState.Programmatic);
+
+        /// <summary>
+        /// Показать значение так, чтобы его было видно.
+        ///
+        /// Видимую часть редактируемого списка рисует выбранный пункт, а не
+        /// набранный текст. Значение, которого нет среди пунктов, попадало
+        /// в текст — и читалось оттуда, — но на экране поле оставалось пустым:
+        /// «large-v3» из файла человек не видел вовсе. Поэтому своё значение
+        /// добавляется к предлагаемым и выбирается.
+        /// </summary>
+        private void Select(string? value)
+        {
+            var written = (value ?? "").Trim();
+            if (written.Length == 0)
+            {
+                // Пусто — тоже значение: «определять самому» у языка. Показывать
+                // в списке пустую строку незачем.
+                _box.SelectedItem = null;
+                _box.Text = "";
+                return;
+            }
+
+            if (!_options.Contains(written))
+            {
+                _options.Insert(0, written);
+            }
+
+            _box.SelectedItem = written;
+            _box.Text = written;
+        }
     }
 
     /// <summary>Выбор из готовых значений: в файл уходит то, что в Tag.</summary>
