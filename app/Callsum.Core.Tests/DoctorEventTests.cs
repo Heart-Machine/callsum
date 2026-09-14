@@ -31,6 +31,29 @@ public class DoctorEventTests
     }
 
     [Fact]
+    public void Вкладка_о_программе_узнаёт_где_что_лежит()
+    {
+        // Папки зависят от того, собрано ядро в exe или запущено из исходников,
+        // поэтому знает о них оно, а не окно.
+        var line = """
+        {"event": "doctor", "id": "1", "version": "1.0.3", "ffmpeg": true, "ollama": false,
+         "ollama_error": "Ollama не отвечает", "cuda_ready": true, "device": "cuda",
+         "compute_type": "float16", "cuda_dir": "C:/callsum-data/cuda", "model_dir": ""}
+        """;
+
+        var message = Assert.IsType<EngineEvent.Doctor>(EngineEvent.Parse(line));
+
+        Assert.Equal("1.0.3", message.Version);
+        Assert.Equal("C:/callsum-data/cuda", message.CudaFolder);
+        Assert.Equal("", message.ModelFolder);
+        Assert.Equal("cuda", message.Device);
+        Assert.True(message.Ffmpeg);
+        Assert.True(message.CudaReady);
+        Assert.False(message.Ollama);
+        Assert.Equal("Ollama не отвечает", message.OllamaError);
+    }
+
+    [Fact]
     public void Настройка_чем_открывать_протоколы_доходит_до_окна()
     {
         var message = Assert.IsType<EngineEvent.Doctor>(EngineEvent.Parse(

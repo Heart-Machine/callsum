@@ -378,5 +378,65 @@ def test_settings_report_tells_the_default_folders(cfg, tmp_path):
     from pathlib import Path as _Path
 
     for key in ("recordings", "out"):
-        assert _Path(report["defaults"][key]).is_absolute()
-        assert report["defaults"][key].endswith(key)
+        assert _Path(report["defaults"]["paths"][key]).is_absolute()
+        assert report["defaults"]["paths"][key].endswith(key)
+
+
+def test_defaults_come_for_every_setting(cfg, tmp_path):
+    """Подсказка «по умолчанию» нужна у каждого поля, а не только у папок."""
+    cfg.source = tmp_path / "config.toml"
+
+    events = run(cfg, {"cmd": "settings", "id": "1"})
+    report = next(e for e in events if e["event"] == "settings")
+
+    defaults = report["defaults"]
+    assert set(defaults) == set(config.DEFAULTS)
+    assert defaults["transcribe"]["model"] == "large-v3"
+    assert defaults["summary"]["num_ctx"] == 8192
+    assert defaults["audio"]["extensions"][0] == ".mkv"
+    # Подстановка полных путей не должна портить сами умолчания программы.
+    assert config.DEFAULTS["paths"]["out"] == "out"
+
+
+def test_installed_ollama_models_are_listed(cfg, monkeypatch):
+    """Окно предлагает выбрать модель протокола из установленных."""
+    asked: list[str] = []
+
+    def fake(host, timeout=10):
+        asked.append(host)
+        return ["qwen3:14b", "llama3:8b"]
+
+    monkeypatch.setattr(serve_module.summarize, "available_models", fake)
+
+    events = run(cfg, {"cmd": "models", "id": "1", "host": "http://гость:11434"})
+
+    answer = next(e for e in events if e["event"] == "models")
+    assert answer["models"] == ["qwen3:14b", "llama3:8b"]
+    # Адрес берётся из команды: в окне его меняют рядом со списком, и список
+    # должен относиться к тому, что человек только что вписал.
+    assert asked == ["http://гость:11434"]
+
+
+def test_models_without_ollama_are_reported_as_error(cfg, monkeypatch):
+    def fake(host, timeout=10):
+        raise serve_module.summarize.OllamaError("Ollama не отвечает на http://x")
+
+    monkeypatch.setattr(serve_module.summarize, "available_models", fake)
+
+    events = run(cfg, {"cmd": "models", "id": "1"})
+
+    error = next(e for e in events if e["event"] == "error")
+    assert "Ollama" in error["message"]
+    assert not any(e["event"] == "models" for e in events), "пустой список ввёл бы в заблуждение"
+
+
+def test_doctor_tells_where_things_are_kept(cfg, tmp_path, monkeypatch):
+    """Вкладка «О программе» показывает эти пути: сама она их не знает."""
+    monkeypatch.setattr(serve_module.summarize, "available_models", lambda host, timeout=10: [])
+    cfg.source = tmp_path / "config.toml"
+
+    events = run(cfg, {"cmd": "doctor", "id": "1"})
+    report = next(e for e in events if e["event"] == "doctor")
+
+    assert report["cuda_dir"].endswith("cuda")
+    assert report["version"]

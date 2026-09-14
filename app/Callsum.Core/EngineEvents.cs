@@ -58,6 +58,39 @@ public abstract record EngineEvent(string? Id)
         /// <summary>Чем пользователь просил открывать протоколы ([view] markdown_app).</summary>
         public string? MarkdownApp => Text("markdown_app");
 
+        /// <summary>Версия ядра: оно обновляется вместе с приложением, но живёт своей жизнью.</summary>
+        public string? Version => Text("version");
+
+        /// <summary>Папка со скачанными библиотеками CUDA.</summary>
+        public string? CudaFolder => Text("cuda_dir");
+
+        /// <summary>Папка с весами модели; пусто — общий кэш Hugging Face.</summary>
+        public string? ModelFolder => Text("model_dir");
+
+        /// <summary>На чём ядро будет считать: cuda или cpu.</summary>
+        public string? Device => Text("device");
+
+        public string? ComputeType => Text("compute_type");
+
+        public bool Ffmpeg => Flag("ffmpeg");
+
+        /// <summary>Ollama отвечает по адресу из настроек.</summary>
+        public bool Ollama => Flag("ollama");
+
+        /// <summary>Модель протокола уже загружена в Ollama.</summary>
+        public bool SummaryModel => Flag("model");
+
+        /// <summary>Библиотеки CUDA на месте: иначе первое распознавание будет долгим.</summary>
+        public bool CudaReady => Flag("cuda_ready");
+
+        /// <summary>Почему не вышло — ядро объясняет само, окну остаётся показать.</summary>
+        public string? FfmpegError => Text("ffmpeg_error");
+
+        public string? OllamaError => Text("ollama_error");
+
+        private bool Flag(string name) =>
+            Report.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
+
         private string? Text(string name) =>
             Report.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
@@ -89,11 +122,25 @@ public abstract record EngineEvent(string? Id)
                 ? number
                 : null;
 
+        /// <summary>Значение-список, например расширения файлов записи.</summary>
+        public IReadOnlyList<string> List(string section, string key) =>
+            SettingValue.ToList(Field(section, key));
+
+        /// <summary>Значение как оно записано в файле — чтобы сравнить с набранным в окне.</summary>
+        public JsonElement? Value(string section, string key) => Field(section, key);
+
+        /// <summary>Что стоит в этой настройке по умолчанию.</summary>
+        public JsonElement? Default(string section, string key) => Field(Defaults, section, key);
+
+        /// <summary>То же значение словами — окно показывает его подсказкой под полем.</summary>
+        public string DefaultText(string section, string key) =>
+            SettingValue.Describe(Default(section, key));
+
         /// <summary>Куда путь указывает на самом деле: в файле он может быть относительным.</summary>
         public string ResolvedPath(string key) => Folder(Resolved, key);
 
         /// <summary>Куда программа сложила бы всё сама, если не выбирать папку.</summary>
-        public string DefaultPath(string key) => Folder(Defaults, key);
+        public string DefaultPath(string key) => DefaultText("paths", key);
 
         private static string Folder(JsonElement block, string key) =>
             block.ValueKind == JsonValueKind.Object
@@ -102,14 +149,19 @@ public abstract record EngineEvent(string? Id)
                 ? value.GetString() ?? ""
                 : "";
 
-        private JsonElement? Field(string section, string key) =>
-            Values.ValueKind == JsonValueKind.Object
-             && Values.TryGetProperty(section, out var block)
-             && block.ValueKind == JsonValueKind.Object
-             && block.TryGetProperty(key, out var value)
+        private JsonElement? Field(string section, string key) => Field(Values, section, key);
+
+        private static JsonElement? Field(JsonElement block, string section, string key) =>
+            block.ValueKind == JsonValueKind.Object
+             && block.TryGetProperty(section, out var values)
+             && values.ValueKind == JsonValueKind.Object
+             && values.TryGetProperty(key, out var value)
                 ? value
                 : null;
     }
+
+    /// <summary>Модели, установленные в Ollama: окно предлагает выбрать из них.</summary>
+    public sealed record Models(string? Id, IReadOnlyList<string> Names) : EngineEvent(Id);
 
     /// <summary>Событие неизвестного вида: ядро новее приложения — не повод падать.</summary>
     public sealed record Unknown(string Type, JsonElement Data) : EngineEvent((string?)null);
@@ -152,6 +204,7 @@ public abstract record EngineEvent(string? Id)
                 "done" => new Done(id, ReadText(root, "out_dir"), ReadFlag(root, "summary")),
                 "error" => new Failed(id, ReadText(root, "message")),
                 "doctor" => new Doctor(id, root.Clone()),
+                "models" => new Models(id, SettingValue.ToList(Branch(root, "models"))),
                 "settings" => new Settings(
                     id,
                     ReadText(root, "path"),

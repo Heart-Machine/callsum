@@ -7,183 +7,663 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="20" RowSpacing="12">
+    <Grid>
+        <Grid.Resources>
+            <Style x:Key="Hint" TargetType="TextBlock">
+                <Setter Property="Opacity" Value="0.6" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="PageTitle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style x:Key="GroupTitle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Margin" Value="0,8,0,0" />
+            </Style>
+            <Style x:Key="Field" TargetType="StackPanel">
+                <Setter Property="Spacing" Value="4" />
+            </Style>
+        </Grid.Resources>
+
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock
-            x:Name="Source"
+        <!-- Слева список вкладок, справа их содержимое: настроек три десятка,
+             и одним списком они не читаются. -->
+        <NavigationView
+            x:Name="Tabs"
             Grid.Row="0"
-            Opacity="0.6"
-            FontSize="12"
-            TextWrapping="Wrap"
-            IsTextSelectionEnabled="True"
-            Text="Читаю настройки…" />
+            PaneDisplayMode="Left"
+            OpenPaneLength="200"
+            IsSettingsVisible="False"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
+            SelectionChanged="OnTabChanged">
 
-        <!-- Отступ справа: полоса прокрутки иначе ложится поверх кнопок «Обзор…». -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,16,0">
-            <!-- Форма выключена, пока настройки не прочитаны: править нечего. -->
-            <ContentControl
-                x:Name="Form"
-                IsEnabled="False"
-                HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Stretch">
-            <StackPanel Spacing="16">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Папки" Tag="folders" IsSelected="True">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Folder" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Запись" Tag="record">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Video" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Распознавание" Tag="transcribe">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Microphone" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Говорящие" Tag="speakers">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="People" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Протокол" Tag="summary">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Document" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="О программе" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Help" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
 
-                <TextBlock Text="Папки" FontWeight="SemiBold" />
+            <!-- Отступ справа: полоса прокрутки иначе ложится поверх кнопок «Обзор…». -->
+            <ScrollViewer x:Name="Pages" VerticalScrollBarVisibility="Auto" Padding="4,0,16,0">
+                <StackPanel>
 
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Записи" />
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="Recordings" Grid.Column="0" />
-                        <Button
-                            Grid.Column="1"
-                            Content="Обзор…"
-                            Tag="Recordings"
-                            Click="OnBrowseClick" />
-                    </Grid>
-                    <TextBlock
-                        x:Name="RecordingsHint"
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Расшифровки и протоколы" />
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="Out" Grid.Column="0" />
-                        <Button Grid.Column="1" Content="Обзор…" Tag="Out" Click="OnBrowseClick" />
-                    </Grid>
-                    <TextBlock x:Name="OutHint" Opacity="0.6" FontSize="12" TextWrapping="Wrap" />
-                </StackPanel>
-
-                <TextBlock Text="Имена" FontWeight="SemiBold" />
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Папка одного созвона" />
-                    <TextBox x:Name="FolderTemplate" />
-                    <TextBlock
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Text="Подстановки: {name} — имя файла записи, {date} — ГГГГ-ММ-ДД, {time} — ЧЧ-ММ-СС, {datetime} — то и другое." />
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Файл записи в OBS" />
-                    <TextBox x:Name="FilenameFormat" />
-                    <TextBlock
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Text="Синтаксис OBS: %CCYY год, %MM месяц, %DD день, %hh часы, %mm минуты, %ss секунды. Применится при следующей настройке профиля OBS." />
-                </StackPanel>
-
-                <TextBlock Text="Звук" FontWeight="SemiBold" />
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Микрофон — дорожка «Я»" />
-                    <ComboBox
-                        x:Name="MicrophoneDevice"
+                    <!-- Форма выключена, пока настройки не прочитаны: править нечего.
+                         «О программе» живёт отдельно — она не про файл настроек. -->
+                    <ContentControl
+                        x:Name="Form"
+                        IsEnabled="False"
                         HorizontalAlignment="Stretch"
-                        DisplayMemberPath="Name"
-                        IsEnabled="False" />
-                    <TextBlock
-                        x:Name="MicrophoneHint"
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Text="Спрашиваю у OBS…" />
+                        HorizontalContentAlignment="Stretch">
+                        <Grid>
+
+                            <!-- Папки -->
+                            <StackPanel x:Name="PageFolders" Tag="folders" Spacing="16">
+                                <TextBlock Text="Папки" Style="{StaticResource PageTitle}" />
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Записи" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="Recordings" Grid.Column="0" />
+                                        <Button
+                                            Grid.Column="1"
+                                            Content="Обзор…"
+                                            Tag="{x:Bind Recordings}"
+                                            Click="OnBrowseClick" />
+                                    </Grid>
+                                    <TextBlock x:Name="RecordingsHint" Style="{StaticResource Hint}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Расшифровки и протоколы" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="Out" Grid.Column="0" />
+                                        <Button
+                                            Grid.Column="1"
+                                            Content="Обзор…"
+                                            Tag="{x:Bind Out}"
+                                            Click="OnBrowseClick" />
+                                    </Grid>
+                                    <TextBlock x:Name="OutHint" Style="{StaticResource Hint}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Папка одного созвона" />
+                                    <TextBox x:Name="FolderTemplate" />
+                                    <TextBlock
+                                        x:Name="FolderTemplateHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Подстановки: {name} — имя файла записи, {date} — ГГГГ-ММ-ДД, {time} — ЧЧ-ММ-СС, {datetime} — то и другое." />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Чем открывать протоколы и расшифровки" />
+                                    <TextBox x:Name="MarkdownApp" />
+                                    <TextBlock
+                                        x:Name="MarkdownAppHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Пусто — чем Windows открывает .md. Можно указать программу (notepad++), путь к ней, команду с подстановкой (code -r {file}) или ссылку (obsidian://open?path={file})." />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Запись -->
+                            <StackPanel x:Name="PageRecord" Tag="record" Spacing="16" Visibility="Collapsed">
+                                <TextBlock Text="Запись" Style="{StaticResource PageTitle}" />
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Микрофон — дорожка «Я»" />
+                                    <ComboBox
+                                        x:Name="MicrophoneDevice"
+                                        HorizontalAlignment="Stretch"
+                                        DisplayMemberPath="Name"
+                                        IsEnabled="False" />
+                                    <TextBlock
+                                        x:Name="MicrophoneHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Спрашиваю у OBS…" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Звук системы — дорожка «Собеседник»" />
+                                    <ComboBox
+                                        x:Name="SystemDevice"
+                                        HorizontalAlignment="Stretch"
+                                        DisplayMemberPath="Name"
+                                        IsEnabled="False" />
+                                    <TextBlock
+                                        x:Name="SystemHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Спрашиваю у OBS…" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Имя файла записи" />
+                                    <TextBox x:Name="FilenameFormat" />
+                                    <TextBlock
+                                        x:Name="FilenameFormatHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Синтаксис OBS: %CCYY год, %MM месяц, %DD день, %hh часы, %mm минуты, %ss секунды. Применится при следующей настройке профиля OBS." />
+                                </StackPanel>
+
+                                <ToggleSwitch
+                                    x:Name="AutoSwitch"
+                                    Header="Переключаться на профиль callsum перед записью"
+                                    OnContent="Да"
+                                    OffContent="Нет" />
+
+                                <ToggleSwitch
+                                    x:Name="RestoreAfter"
+                                    Header="Возвращать прежний профиль после записи"
+                                    OnContent="Да"
+                                    OffContent="Нет" />
+
+                                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                    <Expander.Header>
+                                        <TextBlock Text="Дополнительно" />
+                                    </Expander.Header>
+                                    <StackPanel Spacing="16" Padding="0,8,0,8">
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Профиль OBS" />
+                                            <TextBox x:Name="ObsProfile" />
+                                            <TextBlock
+                                                x:Name="ObsProfileHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="Профиль и коллекция сцен, которые создаёт настройка OBS. Общие настройки OBS программа не трогает." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Адрес OBS" />
+                                            <TextBox x:Name="ObsHost" />
+                                            <TextBlock x:Name="ObsHostHint" Style="{StaticResource Hint}" />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Порт OBS" />
+                                            <NumberBox
+                                                x:Name="ObsPort"
+                                                HorizontalAlignment="Left"
+                                                Width="200"
+                                                Minimum="0"
+                                                Maximum="65535"
+                                                SpinButtonPlacementMode="Compact" />
+                                            <TextBlock
+                                                x:Name="ObsPortHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="0 — спросить у самого OBS. Другое значение перекрывает его настройку." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Какие файлы считать записями" />
+                                            <TextBox x:Name="Extensions" />
+                                            <TextBlock
+                                                x:Name="ExtensionsHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="Расширения через запятую." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Файл дописан, если не менялся, с" />
+                                            <NumberBox
+                                                x:Name="StableSeconds"
+                                                HorizontalAlignment="Left"
+                                                Width="200"
+                                                Minimum="1"
+                                                Maximum="600"
+                                                SpinButtonPlacementMode="Compact" />
+                                            <TextBlock
+                                                x:Name="StableSecondsHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="Столько программа ждёт после остановки записи, прежде чем взяться за файл." />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+
+                            <!-- Распознавание -->
+                            <StackPanel x:Name="PageTranscribe" Tag="transcribe" Spacing="16" Visibility="Collapsed">
+                                <TextBlock Text="Распознавание" Style="{StaticResource PageTitle}" />
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Модель" />
+                                    <ComboBox
+                                        x:Name="WhisperModel"
+                                        IsEditable="True"
+                                        HorizontalAlignment="Stretch" />
+                                    <TextBlock
+                                        x:Name="WhisperModelHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="large-v3 точнее, medium и small быстрее. Новая модель скачается при первом запуске распознавания." />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Язык" />
+                                    <ComboBox
+                                        x:Name="Language"
+                                        IsEditable="True"
+                                        HorizontalAlignment="Stretch" />
+                                    <TextBlock
+                                        x:Name="LanguageHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Пусто — определять самому. Для созвонов на русском лучше оставить ru: автоопределение иногда ошибается на первых секундах." />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Куда скачивать модель" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="ModelDir" Grid.Column="0" />
+                                        <Button
+                                            Grid.Column="1"
+                                            Content="Обзор…"
+                                            Tag="{x:Bind ModelDir}"
+                                            Click="OnBrowseClick" />
+                                    </Grid>
+                                    <TextBlock
+                                        x:Name="ModelDirHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Веса large-v3 весят около трёх гигабайт. Пусто — программа выберет папку сама; где она, видно на вкладке «О программе»." />
+                                </StackPanel>
+
+                                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                    <Expander.Header>
+                                        <TextBlock Text="Дополнительно" />
+                                    </Expander.Header>
+                                    <StackPanel Spacing="16" Padding="0,8,0,8">
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="На чём считать" />
+                                            <ComboBox x:Name="Device" HorizontalAlignment="Stretch">
+                                                <ComboBoxItem Tag="auto" Content="Выбрать самому" />
+                                                <ComboBoxItem Tag="cuda" Content="Видеокарта (cuda)" />
+                                                <ComboBoxItem Tag="cpu" Content="Процессор (cpu)" />
+                                            </ComboBox>
+                                            <TextBlock
+                                                x:Name="DeviceHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="На процессоре распознавание идёт в десятки раз дольше." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Точность вычислений" />
+                                            <ComboBox x:Name="ComputeType" HorizontalAlignment="Stretch">
+                                                <ComboBoxItem Tag="auto" Content="Подобрать самому" />
+                                                <ComboBoxItem Tag="float16" Content="float16 — для видеокарты" />
+                                                <ComboBoxItem Tag="int8" Content="int8 — для процессора" />
+                                                <ComboBoxItem Tag="float32" Content="float32 — медленно и точно" />
+                                            </ComboBox>
+                                            <TextBlock x:Name="ComputeTypeHint" Style="{StaticResource Hint}" />
+                                        </StackPanel>
+
+                                        <ToggleSwitch
+                                            x:Name="Vad"
+                                            Header="Пропускать тишину"
+                                            OnContent="Да"
+                                            OffContent="Нет" />
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Ширина поиска" />
+                                            <NumberBox
+                                                x:Name="BeamSize"
+                                                HorizontalAlignment="Left"
+                                                Width="200"
+                                                Minimum="1"
+                                                Maximum="10"
+                                                SpinButtonPlacementMode="Compact" />
+                                            <TextBlock
+                                                x:Name="BeamSizeHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="Больше — точнее и дольше." />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+
+                            <!-- Говорящие -->
+                            <StackPanel x:Name="PageSpeakers" Tag="speakers" Spacing="16" Visibility="Collapsed">
+                                <TextBlock Text="Говорящие" Style="{StaticResource PageTitle}" />
+                                <TextBlock
+                                    Style="{StaticResource Hint}"
+                                    Text="Так подписаны реплики в расшифровке. Дорожки задаёт OBS: первая — микрофон, вторая — звук компьютера." />
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Дорожка 1 — микрофон" />
+                                    <TextBox x:Name="SpeakerOne" />
+                                    <TextBlock x:Name="SpeakerOneHint" Style="{StaticResource Hint}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Дорожка 2 — звук компьютера" />
+                                    <TextBox x:Name="SpeakerTwo" />
+                                    <TextBlock x:Name="SpeakerTwoHint" Style="{StaticResource Hint}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Если дорожка одна" />
+                                    <TextBox x:Name="SpeakerDefault" />
+                                    <TextBlock
+                                        x:Name="SpeakerDefaultHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Имя для обычных файлов без разделения на дорожки." />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Слить соседние реплики, если пауза меньше, с" />
+                                    <NumberBox
+                                        x:Name="MergeGap"
+                                        HorizontalAlignment="Left"
+                                        Width="200"
+                                        Minimum="0"
+                                        Maximum="30"
+                                        SmallChange="0.5"
+                                        SpinButtonPlacementMode="Compact" />
+                                    <TextBlock x:Name="MergeGapHint" Style="{StaticResource Hint}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Разбить реплику на паузе длиннее, с" />
+                                    <NumberBox
+                                        x:Name="SplitGap"
+                                        HorizontalAlignment="Left"
+                                        Width="200"
+                                        Minimum="0"
+                                        Maximum="30"
+                                        SmallChange="0.5"
+                                        SpinButtonPlacementMode="Compact" />
+                                    <TextBlock
+                                        x:Name="SplitGapHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Длинный кусок речи режется по паузам — так реплики совпадают со временем." />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Протокол -->
+                            <StackPanel x:Name="PageSummary" Tag="summary" Spacing="16" Visibility="Collapsed">
+                                <TextBlock Text="Протокол" Style="{StaticResource PageTitle}" />
+
+                                <ToggleSwitch
+                                    x:Name="SummaryEnabled"
+                                    Header="Составлять протокол после расшифровки"
+                                    OnContent="Да"
+                                    OffContent="Нет" />
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Адрес Ollama" />
+                                    <TextBox x:Name="SummaryHost" />
+                                    <TextBlock x:Name="SummaryHostHint" Style="{StaticResource Hint}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Field}">
+                                    <TextBlock Text="Модель" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox
+                                            x:Name="SummaryModel"
+                                            Grid.Column="0"
+                                            IsEditable="True"
+                                            HorizontalAlignment="Stretch" />
+                                        <Button
+                                            x:Name="RefreshModels"
+                                            Grid.Column="1"
+                                            Content="Обновить"
+                                            Click="OnRefreshModelsClick" />
+                                    </Grid>
+                                    <TextBlock
+                                        x:Name="SummaryModelHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Модель должна быть загружена в Ollama." />
+                                </StackPanel>
+
+                                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                    <Expander.Header>
+                                        <TextBlock Text="Дополнительно" />
+                                    </Expander.Header>
+                                    <StackPanel Spacing="16" Padding="0,8,0,8">
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Окно контекста" />
+                                            <NumberBox
+                                                x:Name="NumCtx"
+                                                HorizontalAlignment="Left"
+                                                Width="200"
+                                                Minimum="512"
+                                                Maximum="262144"
+                                                SmallChange="1024"
+                                                SpinButtonPlacementMode="Compact" />
+                                            <TextBlock
+                                                x:Name="NumCtxHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="Сколько модель держит в памяти за раз. Больше — меньше проходов на длинном созвоне, но и больше видеопамяти." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Температура" />
+                                            <NumberBox
+                                                x:Name="Temperature"
+                                                HorizontalAlignment="Left"
+                                                Width="200"
+                                                Minimum="0"
+                                                Maximum="2"
+                                                SmallChange="0.1"
+                                                SpinButtonPlacementMode="Compact" />
+                                            <TextBlock
+                                                x:Name="TemperatureHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="Выше — свободнее и менее предсказуемо." />
+                                        </StackPanel>
+
+                                        <ToggleSwitch
+                                            x:Name="Think"
+                                            Header="Размышления модели"
+                                            OnContent="Да"
+                                            OffContent="Нет" />
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Держать модель в видеопамяти" />
+                                            <ComboBox x:Name="KeepAlive" IsEditable="True" HorizontalAlignment="Stretch" />
+                                            <TextBlock
+                                                x:Name="KeepAliveHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="0s — выгружать сразу: следующий созвон получит всю видеопамять под распознавание. 5m — держать пять минут, -1 — не выгружать." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Размер куска, символов" />
+                                            <NumberBox
+                                                x:Name="ChunkChars"
+                                                HorizontalAlignment="Left"
+                                                Width="200"
+                                                Minimum="1000"
+                                                Maximum="200000"
+                                                SmallChange="1000"
+                                                SpinButtonPlacementMode="Compact" />
+                                            <TextBlock
+                                                x:Name="ChunkCharsHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="Длинная расшифровка идёт кусками: в окно контекста должны поместиться и кусок, и ответ." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Нахлёст кусков, символов" />
+                                            <NumberBox
+                                                x:Name="ChunkOverlap"
+                                                HorizontalAlignment="Left"
+                                                Width="200"
+                                                Minimum="0"
+                                                Maximum="50000"
+                                                SmallChange="100"
+                                                SpinButtonPlacementMode="Compact" />
+                                            <TextBlock
+                                                x:Name="ChunkOverlapHint"
+                                                Style="{StaticResource Hint}"
+                                                Text="Общий хвост соседних кусков — чтобы мысль на границе не потерялась." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Сколько ждать ответа, с" />
+                                            <NumberBox
+                                                x:Name="TimeoutSeconds"
+                                                HorizontalAlignment="Left"
+                                                Width="200"
+                                                Minimum="30"
+                                                Maximum="86400"
+                                                SmallChange="60"
+                                                SpinButtonPlacementMode="Compact" />
+                                            <TextBlock x:Name="TimeoutSecondsHint" Style="{StaticResource Hint}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </Grid>
+                    </ContentControl>
+
+                    <!-- О программе -->
+                    <StackPanel x:Name="PageAbout" Tag="about" Spacing="16" Visibility="Collapsed">
+                        <TextBlock Text="О программе" Style="{StaticResource PageTitle}" />
+
+                        <StackPanel Style="{StaticResource Field}">
+                            <TextBlock x:Name="AboutVersion" IsTextSelectionEnabled="True" />
+                            <TextBlock x:Name="AboutEngine" Style="{StaticResource Hint}" />
+                        </StackPanel>
+
+                        <TextBlock Text="Окружение" Style="{StaticResource GroupTitle}" />
+                        <StackPanel Style="{StaticResource Field}">
+                            <TextBlock x:Name="AboutDevice" Style="{StaticResource Hint}" Text="Спрашиваю ядро…" />
+                            <TextBlock x:Name="AboutFfmpeg" Style="{StaticResource Hint}" />
+                            <TextBlock x:Name="AboutOllama" Style="{StaticResource Hint}" />
+                            <TextBlock x:Name="AboutCuda" Style="{StaticResource Hint}" />
+                        </StackPanel>
+
+                        <TextBlock Text="Где что лежит" Style="{StaticResource GroupTitle}" />
+                        <Grid ColumnSpacing="8" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock
+                                x:Name="AboutConfig"
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                Style="{StaticResource Hint}"
+                                IsTextSelectionEnabled="True"
+                                VerticalAlignment="Center"
+                                Text="Файл настроек: …" />
+                            <Button
+                                x:Name="OpenConfig"
+                                Grid.Row="0"
+                                Grid.Column="1"
+                                Content="Открыть папку"
+                                IsEnabled="False"
+                                Click="OnOpenFolderClick" />
+
+                            <TextBlock
+                                x:Name="AboutModels"
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                Style="{StaticResource Hint}"
+                                IsTextSelectionEnabled="True"
+                                VerticalAlignment="Center"
+                                Text="Модели распознавания: …" />
+                            <Button
+                                x:Name="OpenModels"
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Content="Открыть папку"
+                                IsEnabled="False"
+                                Click="OnOpenFolderClick" />
+
+                            <TextBlock
+                                x:Name="AboutCudaDir"
+                                Grid.Row="2"
+                                Grid.Column="0"
+                                Style="{StaticResource Hint}"
+                                IsTextSelectionEnabled="True"
+                                VerticalAlignment="Center"
+                                Text="Библиотеки видеокарты: …" />
+                            <Button
+                                x:Name="OpenCudaDir"
+                                Grid.Row="2"
+                                Grid.Column="1"
+                                Content="Открыть папку"
+                                IsEnabled="False"
+                                Click="OnOpenFolderClick" />
+                        </Grid>
+
+                        <TextBlock Text="Обновление" Style="{StaticResource GroupTitle}" />
+                        <StackPanel Style="{StaticResource Field}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button
+                                    x:Name="CheckUpdate"
+                                    Content="Проверить обновление"
+                                    Click="OnCheckUpdateClick" />
+                                <Button
+                                    x:Name="ApplyUpdate"
+                                    Content="Обновить и перезапустить"
+                                    Visibility="Collapsed"
+                                    Click="OnApplyUpdateClick" />
+                            </StackPanel>
+                            <TextBlock x:Name="UpdateStatus" Style="{StaticResource Hint}" />
+                        </StackPanel>
+
+                        <HyperlinkButton
+                            Content="Исходный код и релизы на GitHub"
+                            NavigateUri="https://github.com/Heart-Machine/callsum" />
+                    </StackPanel>
                 </StackPanel>
+            </ScrollViewer>
+        </NavigationView>
 
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Звук системы — дорожка «Собеседник»" />
-                    <ComboBox
-                        x:Name="SystemDevice"
-                        HorizontalAlignment="Stretch"
-                        DisplayMemberPath="Name"
-                        IsEnabled="False" />
-                    <TextBlock
-                        x:Name="SystemHint"
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Text="Спрашиваю у OBS…" />
-                </StackPanel>
-
-                <TextBlock Text="Распознавание" FontWeight="SemiBold" />
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Модель" />
-                    <TextBox x:Name="WhisperModel" />
-                    <TextBlock
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Text="large-v3 точнее, medium и small быстрее. Новая модель скачается при первом запуске распознавания." />
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Язык" />
-                    <TextBox x:Name="Language" />
-                    <TextBlock
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Text="Пусто — определять самому. Для созвонов на русском лучше оставить ru: автоопределение иногда ошибается на первых секундах." />
-                </StackPanel>
-
-                <TextBlock Text="Протокол" FontWeight="SemiBold" />
-
-                <ToggleSwitch
-                    x:Name="SummaryEnabled"
-                    Header="Составлять протокол после расшифровки"
-                    OnContent="Да"
-                    OffContent="Нет" />
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Адрес Ollama" />
-                    <TextBox x:Name="SummaryHost" />
-                </StackPanel>
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Модель протокола" />
-                    <TextBox x:Name="SummaryModel" />
-                    <TextBlock
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Text="Модель должна быть уже загружена в Ollama: ollama pull qwen3:14b" />
-                </StackPanel>
-
-                <TextBlock Text="Чем открывать" FontWeight="SemiBold" />
-
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Программа для протоколов и расшифровок" />
-                    <TextBox x:Name="MarkdownApp" />
-                    <TextBlock
-                        Opacity="0.6"
-                        FontSize="12"
-                        TextWrapping="Wrap"
-                        Text="Пусто — чем Windows открывает .md. Можно указать программу (notepad++), путь к ней, команду с подстановкой (code -r {file}) или ссылку (obsidian://open?path={file})." />
-                </StackPanel>
-            </StackPanel>
-            </ContentControl>
-        </ScrollViewer>
-
-        <Grid Grid.Row="2" ColumnSpacing="8">
+        <Grid Grid.Row="1" ColumnSpacing="8" Padding="20,12,20,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

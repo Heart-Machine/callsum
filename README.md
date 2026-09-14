@@ -197,8 +197,8 @@ JSON в стандартный ввод, события уходят в стан
 callsum serve
 ```
 
-Команды — `process`, `summarize`, `doctor`, `settings`, `settings_set`, `shutdown`; события —
-`ready`, `progress`, `log`, `done`, `error`, `settings`. Настройками владеет ядро: окно
+Команды — `process`, `summarize`, `doctor`, `settings`, `settings_set`, `models`, `shutdown`;
+события — `ready`, `progress`, `log`, `done`, `error`, `settings`, `models`. Настройками владеет ядро: окно
 приложения спрашивает их командой `settings` и возвращает изменения командой `settings_set`,
 а `config.toml` правится по одному значению, с сохранением комментариев.
 Полное описание с примерами — в начале [callsum/serve.py](callsum/serve.py)
