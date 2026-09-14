@@ -22,11 +22,17 @@ def cfg(tmp_path):
 
 @pytest.fixture(autouse=True)
 def no_gpu_probe(monkeypatch):
-    """Тесты не должны трогать видеокарту и грузить модель."""
+    """Тесты не должны трогать видеокарту, грузить модель и качать FFmpeg.
+
+    Про FFmpeg отдельно: на машине автопрогона его нет, и обработка честно
+    полезла его скачивать — сто мегабайт посреди тестов. Своя докачка проверена
+    в test_ffmpeg.py, здесь она только мешает.
+    """
     monkeypatch.setattr(
         serve_module.Transcriber, "_resolve_device",
         staticmethod(lambda device, compute: ("cpu", "int8")),
     )
+    monkeypatch.setattr(serve_module.ffmpeg, "missing", lambda folder=None: [])
 
 
 def run(cfg, *commands):
@@ -114,9 +120,10 @@ def test_processing_reports_progress_and_result(cfg, tmp_path, monkeypatch):
     kinds = [e["event"] for e in events]
     assert "progress" in kinds and "log" in kinds
 
-    progress = next(e for e in events if e["event"] == "progress")
-    assert (progress["stage"], progress["fraction"], progress["detail"]) == (
-        "transcribe", 0.5, "Собеседник")
+    # Именно о распознавании: до него мотор может сообщить и о докачке.
+    progress = next(
+        e for e in events if e["event"] == "progress" and e["stage"] == "transcribe")
+    assert (progress["fraction"], progress["detail"]) == (0.5, "Собеседник")
 
     done = next(e for e in events if e["event"] == "done")
     assert done["summary"] is True
@@ -428,6 +435,19 @@ def test_models_without_ollama_are_reported_as_error(cfg, monkeypatch):
     error = next(e for e in events if e["event"] == "error")
     assert "Ollama" in error["message"]
     assert not any(e["event"] == "models" for e in events), "пустой список ввёл бы в заблуждение"
+
+
+def test_doctor_tells_whether_the_protocol_is_wanted(cfg, tmp_path, monkeypatch):
+    """С выключенным протоколом молчащая Ollama — не повод предупреждать."""
+    monkeypatch.setattr(serve_module.summarize, "available_models", lambda host, timeout=10: [])
+    cfg.data["summary"] = dict(cfg.summary, enabled=False, model="qwen3:14b")
+    cfg.source = tmp_path / "config.toml"
+
+    report = next(e for e in run(cfg, {"cmd": "doctor", "id": "1"}) if e["event"] == "doctor")
+
+    assert report["summary_enabled"] is False
+    # Имя модели нужно, чтобы окно могло сказать, что именно загружать.
+    assert report["summary_model"] == "qwen3:14b"
 
 
 def test_doctor_tells_where_things_are_kept(cfg, tmp_path, monkeypatch):

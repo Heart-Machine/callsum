@@ -27,6 +27,9 @@ public sealed partial class MainWindow : Window
     private readonly Updates _updates;
     private readonly ObservableCollection<ResultRow> _results = [];
 
+    /// <summary>Задания, которые запускало это окно: ответы на них — его дело.</summary>
+    private readonly HashSet<string> _mine = [];
+
     private EngineClient? _engine;
     private SettingsWindow? _settings;
     private DateTimeOffset? _recordingSince;
@@ -36,6 +39,7 @@ public sealed partial class MainWindow : Window
     private string? _recordFolderNote;
     private bool _pending;
     private bool _obsSetupOffered;
+    private bool _warned;
     private int _queued;
 
     public MainWindow()
@@ -112,6 +116,21 @@ public sealed partial class MainWindow : Window
 
     private void OnEngineEvent(EngineEvent message)
     {
+        // Ядро отвечает и на вопросы других окон: окно настроек спрашивает
+        // у него список моделей Ollama, вкладка «О программе» — окружение.
+        // Их отказ — не «ошибка обработки»: подпись стадии относится к записи,
+        // а показать причину должен тот, кто спрашивал.
+        if (message is EngineEvent.Done or EngineEvent.Failed
+            && message.Id is { Length: > 0 } id && !_mine.Remove(id))
+        {
+            if (message is EngineEvent.Failed other)
+            {
+                Append($"! {other.Message}");
+            }
+
+            return;
+        }
+
         switch (message)
         {
             case EngineEvent.Ready ready:
@@ -130,6 +149,7 @@ public sealed partial class MainWindow : Window
                 // Проверка окружения — первое, что окно спрашивает у ядра:
                 // здесь и выясняется, что OBS пишет не туда, где ищет программа.
                 ApplyFolders(doctor.OutFolder, doctor.RecordingsFolder, doctor.MarkdownApp);
+                ShowWarnings(doctor);
                 _ = SyncRecordFolderAsync();
                 break;
 
@@ -164,7 +184,8 @@ public sealed partial class MainWindow : Window
     {
         // Подробность уточняет стадию там, где она о чём-то говорит: кого
         // распознаём сейчас и сколько мегабайт уже скачано.
-        var detailed = progress.Stage is EngineStage.Transcribe or EngineStage.Download or EngineStage.Model;
+        var detailed = progress.Stage is EngineStage.Transcribe or EngineStage.Download
+                              or EngineStage.Model or EngineStage.Ffmpeg;
         Stage.Text = detailed && progress.Detail is { Length: > 0 } detail
             ? $"{EngineStage.Describe(progress.Stage)}: {detail}"
             : EngineStage.Describe(progress.Stage);
@@ -228,6 +249,75 @@ public sealed partial class MainWindow : Window
             // Одно и то же замечание на каждое переподключение — шум в журнале.
             _recordFolderNote = note;
             Append($"! Папка записи: {note}");
+        }
+    }
+
+    // --- окружение -------------------------------------------------------
+    /// <summary>
+    /// Что помешает работе — плашками над кнопкой записи.
+    ///
+    /// Ядро проверяет окружение при запуске, но раньше его ответ читала только
+    /// вкладка «О программе»: про молчащую Ollama человек узнавал через час,
+    /// когда протокол не собрался, а про отсутствующий FFmpeg — когда пропала
+    /// первая запись.
+    /// </summary>
+    private void ShowWarnings(EngineEvent.Doctor doctor)
+    {
+        Warnings.Children.Clear();
+        var found = EnvironmentCheck.Read(doctor);
+        foreach (var warning in found)
+        {
+            Warnings.Children.Add(new InfoBar
+            {
+                IsOpen = true,
+                // Закрыть плашку можно было бы не читая, а причина осталась бы.
+                IsClosable = false,
+                Severity = warning.Level == WarningLevel.Problem
+                    ? InfoBarSeverity.Warning
+                    : InfoBarSeverity.Informational,
+                Title = warning.Title,
+                Message = warning.What,
+            });
+        }
+
+        if (found.Count == 0)
+        {
+            // Отвечаем только тому, кто спрашивал: при запуске тишина и так
+            // означает, что всё в порядке.
+            if (_warned)
+            {
+                Append("Окружение в порядке");
+            }
+
+            _warned = false;
+            return;
+        }
+
+        _warned = true;
+
+        // Ollama запускают, модель докачивают — и хочется убедиться, что
+        // помогло, не перезапуская программу.
+        var again = new HyperlinkButton { Content = "Проверить ещё раз", Padding = new Thickness(4, 0, 4, 0) };
+        again.Click += OnRecheckClick;
+        Warnings.Children.Add(again);
+    }
+
+    private async void OnRecheckClick(object sender, RoutedEventArgs args)
+    {
+        if (_engine is null)
+        {
+            Append($"! {EngineLocator.NotFoundMessage}");
+            return;
+        }
+
+        Append("Проверяю окружение…");
+        try
+        {
+            await _engine.DoctorAsync();
+        }
+        catch (EngineException exception)
+        {
+            Append($"! {exception.Message}");
         }
     }
 
@@ -541,7 +631,9 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            await _engine.ProcessAsync(path, force).ConfigureAwait(true);
+            // Номер задания запоминается: по нему потом видно, что отказ ядра
+            // относится к этой записи, а не к чужому вопросу.
+            _mine.Add(await _engine.ProcessAsync(path, force).ConfigureAwait(true));
             _queued++;
         }
         catch (EngineException exception)

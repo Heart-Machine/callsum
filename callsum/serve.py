@@ -19,6 +19,7 @@
 
     {"event": "ready",    "device": "cuda", "compute_type": "float16", "version": "1.0.0"}
     {"event": "progress", "id": "1", "stage": "transcribe", "fraction": 0.42, "detail": "Я"}
+    {"event": "progress", "id": "1", "stage": "ffmpeg", "fraction": 0.4, "detail": "46 МБ"}
     {"event": "log",      "id": "1", "text": "…"}
     {"event": "done",     "id": "1", "out_dir": "…", "summary": true}
     {"event": "error",    "id": "1", "message": "…"}
@@ -35,7 +36,7 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-from . import __version__, audio, config, cuda, models, naming, settings, summarize
+from . import __version__, audio, config, cuda, ffmpeg, models, naming, settings, summarize
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -137,6 +138,7 @@ class Engine:
             })
             return
 
+        self._ensure_ffmpeg(request_id)
         res = process(
             src,
             self.cfg,
@@ -301,6 +303,9 @@ class Engine:
         except audio.FFmpegMissing as exc:
             report["ffmpeg"] = False
             report["ffmpeg_error"] = str(exc)
+            # Не беда: перед первой обработкой программа скачает его сама,
+            # и окно скажет об этом замечанием, а не ошибкой.
+            report["ffmpeg_will_download"] = True
 
         device, compute_type = Transcriber._resolve_device(
             self.cfg.transcribe["device"], self.cfg.transcribe["compute_type"]
@@ -313,6 +318,10 @@ class Engine:
 
         host = self.cfg.summary["host"]
         wanted = str(self.cfg.summary["model"])
+        # Окно предупреждает о молчащей Ollama, но только когда протокол нужен:
+        # с выключенным протоколом это была бы жалоба на то, чего не просили.
+        report["summary_enabled"] = bool(self.cfg.summary["enabled"])
+        report["summary_model"] = wanted
         try:
             installed = summarize.available_models(host)
             report["ollama"] = True
@@ -334,6 +343,7 @@ class Engine:
         # в exe или запущено из исходников.
         report["version"] = __version__
         report["cuda_dir"] = str(cuda.target_dir())
+        report["ffmpeg_dir"] = str(ffmpeg.target_dir()) if ffmpeg.installed() else ""
         report["model_dir"] = str(models.model_dir(self.cfg) or "")
 
         # Папки заводим сразу: приложению нужно знать готовые пути, а не
@@ -347,6 +357,27 @@ class Engine:
             report[key] = str(folder)
 
         self.emit(report)
+
+    def _ensure_ffmpeg(self, request_id: Any = None) -> None:
+        """Донести FFmpeg до первой обработки.
+
+        Без него не извлечь ни одной дорожки, а весит он двести мегабайт —
+        столько же, сколько всё остальное приложение, поэтому в установщик
+        не едет. Качается один раз на машину, и это видно в окне.
+        """
+        if not ffmpeg.missing():
+            return
+
+        ffmpeg.ensure(
+            on_progress=lambda fraction, detail: self.emit({
+                "event": "progress",
+                "id": request_id,
+                "stage": "ffmpeg",
+                "fraction": fraction,
+                "detail": detail,
+            }),
+            log=lambda text: self.emit({"event": "log", "id": request_id, "text": str(text)}),
+        )
 
     def _ensure_transcriber(self, request_id: Any = None) -> Transcriber:
         if self._transcriber is None:

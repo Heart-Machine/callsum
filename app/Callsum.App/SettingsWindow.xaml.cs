@@ -567,9 +567,14 @@ public sealed partial class SettingsWindow : Window
         AboutDevice.Text = doctor.Device == "cuda"
             ? $"Распознавание считает видеокарта ({doctor.ComputeType})"
             : $"Распознавание считает процессор ({doctor.ComputeType}) — это в десятки раз дольше";
-        AboutFfmpeg.Text = doctor.Ffmpeg
-            ? "ffmpeg на месте"
-            : $"ffmpeg не найден: {doctor.FfmpegError}";
+        AboutFfmpeg.Text = (doctor.Ffmpeg, doctor.FfmpegWillDownload) switch
+        {
+            (true, _) => doctor.FfmpegFolder is { Length: > 0 } ours
+                ? $"FFmpeg на месте, своя копия: {ours}"
+                : "FFmpeg на месте, установленный в системе",
+            (false, true) => "FFmpeg приедет при первой обработке — около 110 МБ",
+            _ => $"FFmpeg не найден: {doctor.FfmpegError}",
+        };
         AboutOllama.Text = doctor.Ollama
             ? doctor.SummaryModel
                 ? "Ollama отвечает, выбранная модель в ней есть"

@@ -11,6 +11,9 @@ public static class EngineStage
     /// <summary>Она же доносит веса модели — это гигабайты и минуты.</summary>
     public const string Model = "model";
 
+    /// <summary>И FFmpeg, если в системе его нет: им извлекаются дорожки.</summary>
+    public const string Ffmpeg = "ffmpeg";
+
     public const string Audio = "audio";
     public const string Transcribe = "transcribe";
     public const string Summary = "summary";
@@ -21,6 +24,7 @@ public static class EngineStage
     {
         Download => "Скачиваю библиотеки для видеокарты",
         Model => "Скачиваю модель распознавания",
+        Ffmpeg => "Скачиваю FFmpeg",
         Audio => "Готовлю дорожки…",
         Transcribe => "Распознаю речь",
         Summary => "Составляю протокол…",
@@ -80,11 +84,28 @@ public abstract record EngineEvent(string? Id)
         /// <summary>Модель протокола уже загружена в Ollama.</summary>
         public bool SummaryModel => Flag("model");
 
+        /// <summary>Какую модель ждёт протокол: окно скажет, что загружать.</summary>
+        public string? SummaryModelName => Text("summary_model");
+
+        /// <summary>Нужен ли протокол вообще — иначе про Ollama говорить незачем.</summary>
+        public bool SummaryEnabled => Flag("summary_enabled");
+
+        /// <summary>Почему не вышло завести папку записей.</summary>
+        public string? RecordingsError => Text("recordings_error");
+
+        public string? OutError => Text("out_error");
+
         /// <summary>Библиотеки CUDA на месте: иначе первое распознавание будет долгим.</summary>
         public bool CudaReady => Flag("cuda_ready");
 
         /// <summary>Почему не вышло — ядро объясняет само, окну остаётся показать.</summary>
         public string? FfmpegError => Text("ffmpeg_error");
+
+        /// <summary>FFmpeg не найден, но программа скачает его сама перед обработкой.</summary>
+        public bool FfmpegWillDownload => Flag("ffmpeg_will_download");
+
+        /// <summary>Папка со своей копией FFmpeg; пусто — работаем системным.</summary>
+        public string? FfmpegFolder => Text("ffmpeg_dir");
 
         public string? OllamaError => Text("ollama_error");
 
