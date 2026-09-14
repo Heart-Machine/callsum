@@ -77,8 +77,7 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>Версия приложения — её же несёт установщик.</summary>
-    private static string Version =>
-        Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "";
+    private static string Version => AppVersion.Current(Assembly.GetExecutingAssembly());
 
     /// <summary>
     /// Какие поля есть на форме и где их значения живут в файле.
