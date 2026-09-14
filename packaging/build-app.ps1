@@ -38,14 +38,32 @@ if (-not (Get-Command vpk -ErrorAction SilentlyContinue)) {
     throw "Не найден vpk. Поставьте его один раз: dotnet tool install -g vpk"
 }
 
-# В PATH может стоять dotnet без SDK — так бывает, когда рядом установлены
-# системный и пользовательский. Тогда берём тот, что в профиле. Проверяем по
-# выводу, а не по коду возврата: без SDK `--list-sdks` молча печатает пустоту
-# и завершается успешно.
-$dotnet = 'dotnet'
-if (-not (& $dotnet --list-sdks 2>$null)) {
-    $dotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
-    if (-not (Test-Path $dotnet) -or -not (& $dotnet --list-sdks 2>$null)) {
+# dotnet на машине бывает не один: системный без SDK, пользовательский из
+# профиля, ещё один — из инструкции в app/README. Нужен тот, у которого есть
+# SDK 9: на нём собрано и проверено всё остальное, а сборка релиза не то место,
+# где стоит выяснять, справится ли соседний. Проверяем по выводу, а не по коду
+# возврата: без SDK `--list-sdks` молча печатает пустоту и завершается успешно.
+$candidates = @(
+    'dotnet',
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),
+    (Join-Path $env:USERPROFILE '.dotnet\dotnet.exe')
+)
+
+$dotnet = $null
+$anySdk = $null
+foreach ($candidate in $candidates) {
+    if ($candidate -ne 'dotnet' -and -not (Test-Path $candidate)) { continue }
+    $sdks = & $candidate --list-sdks 2>$null
+    if (-not $sdks) { continue }
+    if (-not $anySdk) { $anySdk = $candidate }
+    if ($sdks | Where-Object { $_ -like '9.*' }) { $dotnet = $candidate; break }
+}
+
+if (-not $dotnet) {
+    if ($anySdk) {
+        Write-Warning "SDK 9 не нашёлся, собираю тем, что есть: $anySdk"
+        $dotnet = $anySdk
+    } else {
         throw "Не найден .NET SDK. Поставьте его: https://dot.net"
     }
 }
