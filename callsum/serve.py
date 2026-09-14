@@ -381,10 +381,14 @@ class Engine:
 
     def _ensure_transcriber(self, request_id: Any = None) -> Transcriber:
         if self._transcriber is None:
-            self.emit({"event": "log", "text": "Загружаю модель распознавания…"})
             self._transcriber = Transcriber(
                 self.cfg,
                 verbose=False,
+                # Без этого распознаватель говорил в пустоту: «скачиваю модель»,
+                # «кэш починен», «нет связи — беру из кэша» не доходили до окна,
+                # и о скачивании сообщала одна полоса с мегабайтами.
+                log=lambda text: self.emit({
+                    "event": "log", "id": request_id, "text": str(text)}),
                 # При первом распознавании на машине качаются библиотеки CUDA
                 # и веса модели — гигабайты. Молчать эти минуты нельзя.
                 on_progress=lambda stage, fraction, detail: self.emit({

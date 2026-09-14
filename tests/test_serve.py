@@ -129,6 +129,46 @@ def test_processing_reports_progress_and_result(cfg, tmp_path, monkeypatch):
     assert done["summary"] is True
 
 
+def test_transcriber_explains_itself_in_the_window(cfg, tmp_path, monkeypatch):
+    """Скачивание модели должно объясняться словами, а не одной полосой.
+
+    Распознаватель говорит о скачивании, починке кэша и потерянной связи, но
+    мотор создавал его молчащим: наружу пробивались только мегабайты под
+    таймером, и человек не понимал, что происходит.
+    """
+    source = tmp_path / "rec" / "созвон.mkv"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"")
+
+    class FakeTranscriber:
+        def __init__(self, cfg_, verbose=True, on_progress=None, log=None):
+            log("Скачиваю модель распознавания large-v3")
+            self.device, self.compute_type = "cpu", "int8"
+
+        @staticmethod
+        def _resolve_device(device, compute):
+            return "cpu", "int8"
+
+    class FakeResult:
+        def __init__(self, out_dir):
+            self.out_dir = out_dir
+            self.summary_md = out_dir / "summary.md"
+
+    def fake_process(src, config_, transcriber=None, log=print, on_stage=None, **kwargs):
+        out_dir = cfg.path("out") / "созвон"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return FakeResult(out_dir)
+
+    monkeypatch.setattr(serve_module, "Transcriber", FakeTranscriber)
+    monkeypatch.setattr(serve_module, "process", fake_process)
+
+    events = run(cfg, {"cmd": "process", "id": "9", "path": str(source)})
+
+    said = [e["text"] for e in events if e["event"] == "log"]
+    assert any("Скачиваю модель распознавания" in line for line in said), said
+    assert any("Модель загружена" in line for line in said), said
+
+
 def test_summarize_without_transcript_is_an_error(cfg, tmp_path):
     events = run(cfg, {"cmd": "summarize", "id": "4", "transcript": str(tmp_path / "нет")})
     error = next(e for e in events if e["event"] == "error")

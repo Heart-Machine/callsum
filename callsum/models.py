@@ -120,10 +120,14 @@ def ensure(cfg, log: Log | None = None, on_progress: Progress | None = None) -> 
     cache = str(folder) if folder else None
 
     _no_symlinks()
+    _quiet()
     faster_whisper_utils = _import_utils()
 
     cached = _cached(faster_whisper_utils, name, cache)
     if cached is not None and _ready(cached, say):
+        # Сказать об этом стоит: иначе о судьбе трёх гигабайт человек узнаёт
+        # только по тому, бегут мегабайты или нет.
+        say(f"Модель {name} на месте: {cached}")
         return cached
 
     say(f"Скачиваю модель распознавания {name} — это бывает один раз на машине.")
@@ -166,6 +170,18 @@ def _no_symlinks() -> None:
     # Переменную окружения он читает один раз, при импорте, а импортируют его
     # задолго до первого скачивания — поэтому правим и то, что уже прочитано.
     constants.HF_HUB_DISABLE_SYMLINKS = True
+
+
+def _quiet() -> None:
+    """Убрать из журнала советы Hugging Face.
+
+    Он предупреждает, что запросы идут без токена и что ускоритель скачивания
+    не установлен. Сделать с этим человеку нечего, а выглядят обе строки как
+    сообщение о скачивании — и пугают там, где ничего не качается.
+    """
+    import logging
+
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 
 def _ready(folder: str, say: Log) -> bool:
