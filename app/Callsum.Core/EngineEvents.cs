@@ -80,6 +80,17 @@ public abstract record EngineEvent(string? Id)
         /// <summary>Модель протокола уже загружена в Ollama.</summary>
         public bool SummaryModel => Flag("model");
 
+        /// <summary>Какую модель ждёт протокол: окно скажет, что загружать.</summary>
+        public string? SummaryModelName => Text("summary_model");
+
+        /// <summary>Нужен ли протокол вообще — иначе про Ollama говорить незачем.</summary>
+        public bool SummaryEnabled => Flag("summary_enabled");
+
+        /// <summary>Почему не вышло завести папку записей.</summary>
+        public string? RecordingsError => Text("recordings_error");
+
+        public string? OutError => Text("out_error");
+
         /// <summary>Библиотеки CUDA на месте: иначе первое распознавание будет долгим.</summary>
         public bool CudaReady => Flag("cuda_ready");
 

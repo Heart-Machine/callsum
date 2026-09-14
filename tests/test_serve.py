@@ -430,6 +430,19 @@ def test_models_without_ollama_are_reported_as_error(cfg, monkeypatch):
     assert not any(e["event"] == "models" for e in events), "пустой список ввёл бы в заблуждение"
 
 
+def test_doctor_tells_whether_the_protocol_is_wanted(cfg, tmp_path, monkeypatch):
+    """С выключенным протоколом молчащая Ollama — не повод предупреждать."""
+    monkeypatch.setattr(serve_module.summarize, "available_models", lambda host, timeout=10: [])
+    cfg.data["summary"] = dict(cfg.summary, enabled=False, model="qwen3:14b")
+    cfg.source = tmp_path / "config.toml"
+
+    report = next(e for e in run(cfg, {"cmd": "doctor", "id": "1"}) if e["event"] == "doctor")
+
+    assert report["summary_enabled"] is False
+    # Имя модели нужно, чтобы окно могло сказать, что именно загружать.
+    assert report["summary_model"] == "qwen3:14b"
+
+
 def test_doctor_tells_where_things_are_kept(cfg, tmp_path, monkeypatch):
     """Вкладка «О программе» показывает эти пути: сама она их не знает."""
     monkeypatch.setattr(serve_module.summarize, "available_models", lambda host, timeout=10: [])

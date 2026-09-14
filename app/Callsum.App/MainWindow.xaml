@@ -19,7 +19,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0">
+        <StackPanel Grid.Row="0" Spacing="12">
+        <Grid>
             <!-- Состояние связи с OBS: видно сразу, без раскрытия журнала. -->
             <TextBlock
                 x:Name="ObsStatus"
@@ -52,6 +53,11 @@
                     Click="OnSettingsClick" />
             </StackPanel>
         </Grid>
+
+            <!-- Что помешает работе: нет FFmpeg, молчит Ollama, не скачана
+                 модель. Плашки появляются здесь, а не в свёрнутом журнале. -->
+            <StackPanel x:Name="Warnings" Spacing="8" />
+        </StackPanel>
 
         <Button
             x:Name="RecordButton"

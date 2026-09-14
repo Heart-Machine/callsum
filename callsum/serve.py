@@ -313,6 +313,10 @@ class Engine:
 
         host = self.cfg.summary["host"]
         wanted = str(self.cfg.summary["model"])
+        # Окно предупреждает о молчащей Ollama, но только когда протокол нужен:
+        # с выключенным протоколом это была бы жалоба на то, чего не просили.
+        report["summary_enabled"] = bool(self.cfg.summary["enabled"])
+        report["summary_model"] = wanted
         try:
             installed = summarize.available_models(host)
             report["ollama"] = True
