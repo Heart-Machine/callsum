@@ -36,6 +36,15 @@
                     Visibility="Collapsed"
                     Click="OnUpdateClick" />
 
+                <!-- Появляется, когда в OBS нет профиля и коллекции callsum:
+                     без них запись пойдёт с чужими настройками. -->
+                <HyperlinkButton
+                    x:Name="SetUpObs"
+                    Padding="4,0"
+                    Visibility="Collapsed"
+                    Content="Настроить OBS"
+                    Click="OnSetUpObsClick" />
+
                 <HyperlinkButton
                     x:Name="OpenSettings"
                     Padding="4,0"

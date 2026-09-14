@@ -35,6 +35,7 @@ public sealed partial class MainWindow : Window
     private string? _recordingsFolder;
     private string? _recordFolderNote;
     private bool _pending;
+    private bool _obsSetupOffered;
     private int _queued;
 
     public MainWindow()
@@ -230,6 +231,97 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // --- настройка OBS --------------------------------------------------
+    /// <summary>
+    /// Готов ли OBS писать созвоны.
+    ///
+    /// Без профиля и коллекции сцен callsum запись идёт с чужими настройками:
+    /// одной дорожкой, в другом формате и не в ту папку. Раньше это выяснялось
+    /// после созвона, когда записывать заново уже нечего, — поэтому окно
+    /// спрашивает сразу, как только OBS подключился.
+    /// </summary>
+    private async Task CheckObsSetupAsync()
+    {
+        var state = await _obs.GetSetupStateAsync();
+        _ui.TryEnqueue(() => ShowObsSetup(state));
+    }
+
+    private void ShowObsSetup(ObsService.SetupState? state)
+    {
+        if (state is null)
+        {
+            return;
+        }
+
+        SetUpObs.Visibility = state.Ready ? Visibility.Collapsed : Visibility.Visible;
+        if (state.Ready)
+        {
+            _obsSetupOffered = false;
+            return;
+        }
+
+        // Одно и то же предложение на каждое переподключение — шум в журнале.
+        if (_obsSetupOffered)
+        {
+            return;
+        }
+
+        _obsSetupOffered = true;
+        var missing = (state.Profile, state.Collection) switch
+        {
+            (false, false) => "профиля и коллекции сцен",
+            (true, false) => "коллекции сцен",
+            _ => "профиля",
+        };
+        Append($"В OBS нет {missing} callsum — запись пойдёт с чужими настройками. "
+               + "Нажмите «Настроить OBS»: программа заведёт их сама, ваши настройки останутся на месте.");
+    }
+
+    private async void OnSetUpObsClick(object sender, RoutedEventArgs args)
+    {
+        if (_recordingSince is not null)
+        {
+            // Настройка перечитывает профиль OBS — посреди записи это её оборвёт.
+            Append("! Сейчас идёт запись — настрою OBS, когда она закончится");
+            return;
+        }
+
+        if (_engine is null)
+        {
+            Append($"! Куда писать записи, знают настройки, а их читает ядро: {EngineLocator.NotFoundMessage}");
+            return;
+        }
+
+        SetUpObs.IsEnabled = false;
+        Append("Настраиваю OBS — это занимает около полминуты…");
+        try
+        {
+            // Папку и имя файла берём из настроек, а не из своих представлений:
+            // иначе OBS начал бы писать не туда, где программа ищет записи.
+            var settings = await _engine.GetSettingsAsync();
+            var folder = settings.ResolvedPath("recordings");
+            var format = settings.Text("obs", "filename_format");
+
+            if (await _obs.SetUpAsync(folder, format) is { Length: > 0 } error)
+            {
+                Append($"! Не вышло настроить OBS: {error}");
+                return;
+            }
+
+            Append($"OBS настроен: записи пойдут в {folder}");
+            _notifications.Show("OBS настроен", "Можно записывать созвон");
+        }
+        catch (Exception exception) when (exception is EngineException or TimeoutException)
+        {
+            Append($"! {exception.Message}");
+        }
+        finally
+        {
+            SetUpObs.IsEnabled = true;
+            _ = CheckObsSetupAsync();
+        }
+    }
+
     private async Task ReloadResultsAsync()
     {
         if (_outFolder is not { Length: > 0 } folder)
@@ -397,6 +489,7 @@ public sealed partial class MainWindow : Window
             // OBS мог запуститься позже приложения — папку записи он должен
             // получить и в этом случае, а не только при чтении настроек.
             _ = SyncRecordFolderAsync();
+            _ = CheckObsSetupAsync();
         }
 
         if (!connected)

@@ -198,6 +198,17 @@
                                     OnContent="Да"
                                     OffContent="Нет" />
 
+                                <StackPanel Style="{StaticResource Field}">
+                                    <Button
+                                        x:Name="SetUpObs"
+                                        Content="Настроить OBS заново"
+                                        Click="OnSetUpObsClick" />
+                                    <TextBlock
+                                        x:Name="SetUpObsHint"
+                                        Style="{StaticResource Hint}"
+                                        Text="Заведёт профиль и коллекцию сцен callsum, разведёт микрофон и звук системы по дорожкам, задаст формат и папку записи. Остальные настройки OBS останутся как были." />
+                                </StackPanel>
+
                                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                                     <Expander.Header>
                                         <TextBlock Text="Дополнительно" />

@@ -101,6 +101,30 @@ public sealed class ObsService
     public Task SetCurrentSceneCollectionAsync(string name, CancellationToken cancellationToken = default) =>
         _client.RequestAsync("SetCurrentSceneCollection", new { sceneCollectionName = name }, cancellationToken);
 
+    /// <summary>Что из нужного для записи в OBS уже заведено.</summary>
+    /// <param name="Profile">Профиль: формат записи, дорожки, папка.</param>
+    /// <param name="Collection">Коллекция сцен: в ней живут источники звука.</param>
+    public sealed record SetupState(bool Profile, bool Collection)
+    {
+        /// <summary>Готов ли OBS писать созвоны так, как их ждёт программа.</summary>
+        public bool Ready => Profile && Collection;
+    }
+
+    /// <summary>
+    /// Заведены ли в OBS наш профиль и коллекция сцен.
+    ///
+    /// Без них запись идёт с чужими настройками — одной дорожкой, в другом
+    /// формате и не в ту папку, — а выясняется это только после созвона,
+    /// когда записывать заново уже нечего.
+    /// </summary>
+    public async Task<SetupState> GetSetupStateAsync(
+        string name, CancellationToken cancellationToken = default)
+    {
+        var (_, profiles) = await GetProfilesAsync(cancellationToken).ConfigureAwait(false);
+        var (_, collections) = await GetSceneCollectionsAsync(cancellationToken).ConfigureAwait(false);
+        return new SetupState(profiles.Contains(name), collections.Contains(name));
+    }
+
     /// <summary>
     /// Переключить профиль вместе с одноимённой коллекцией сцен: настройки записи
     /// живут в профиле, а раскладка звука по дорожкам — в коллекции.

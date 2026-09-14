@@ -134,6 +134,60 @@ public sealed class ObsConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Настроен ли OBS под созвоны. null — спросить не у кого: нет подключения.
+    /// </summary>
+    public async Task<ObsService.SetupState?> GetSetupStateAsync()
+    {
+        var service = _service;
+        if (service is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await service.GetSetupStateAsync(ObsSetup.DefaultProfile).ConfigureAwait(false);
+        }
+        catch (ObsException)
+        {
+            // Связь оборвалась между проверками — окно просто не станет ничего
+            // предлагать, а подключение восстановится само.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Завести в OBS профиль и коллекцию сцен callsum: дорожки, формат записи,
+    /// папку. Возвращает текст ошибки или null, если всё вышло.
+    ///
+    /// Чужие настройки при этом не трогаются: всё, что мы меняем, живёт
+    /// в своём профиле и своей коллекции, а прежние остаются на месте.
+    /// Ход работы уходит в журнал окна — это десяток секунд, и человек должен
+    /// видеть, что происходит.
+    /// </summary>
+    public async Task<string?> SetUpAsync(string recordingsFolder, string filenameFormat)
+    {
+        var service = _service;
+        if (service is null)
+        {
+            return "Нет подключения к OBS";
+        }
+
+        try
+        {
+            var setup = new ObsSetup(service, message => Log?.Invoke(message));
+            await setup.RunAsync(ObsSetup.DefaultProfile, recordingsFolder, filenameFormat)
+                .ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception exception)
+            when (exception is ObsException or IOException or UnauthorizedAccessException)
+        {
+            return exception.Message;
+        }
+    }
+
     /// <summary>Что можно выбрать для одного источника звука и что выбрано сейчас.</summary>
     public sealed record AudioChoice(
         string Input, IReadOnlyList<ObsDevice> Devices, string Current, string? Error);
