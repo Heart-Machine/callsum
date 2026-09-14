@@ -59,6 +59,10 @@ class Engine:
         self._queue: queue.Queue = queue.Queue()
         self._thread: threading.Thread | None = None
         self._transcriber: Transcriber | None = None
+        # Над чем работаем прямо сейчас. Распознаватель живёт дольше одной
+        # записи, а отчитываться должен за ту, что у него в руках, — поэтому
+        # номер задания он берёт отсюда, а не запоминает при создании.
+        self._current: Any = None
 
     # --- жизненный цикл ----------------------------------------------
     def start(self) -> None:
@@ -101,6 +105,7 @@ class Engine:
             "settings_set": self._settings_set,
             "models": self._models,
         }.get(str(name))
+        self._current = command.get("id")
         if handler is None:
             self.emit({
                 "event": "error",
@@ -390,12 +395,12 @@ class Engine:
                 # «кэш починен», «нет связи — беру из кэша» не доходили до окна,
                 # и о скачивании сообщала одна полоса с мегабайтами.
                 log=lambda text: self.emit({
-                    "event": "log", "id": request_id, "text": str(text)}),
+                    "event": "log", "id": self._current, "text": str(text)}),
                 # При первом распознавании на машине качаются библиотеки CUDA
                 # и веса модели — гигабайты. Молчать эти минуты нельзя.
                 on_progress=lambda stage, fraction, detail: self.emit({
                     "event": "progress",
-                    "id": request_id,
+                    "id": self._current,
                     "stage": stage,
                     "fraction": fraction,
                     "detail": detail,
@@ -403,6 +408,7 @@ class Engine:
             )
             self.emit({
                 "event": "log",
+                "id": request_id,
                 "text": f"Модель загружена ({self._transcriber.device}/"
                         f"{self._transcriber.compute_type})",
             })

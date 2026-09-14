@@ -54,3 +54,21 @@ def _any_certificate() -> str:
         if encoding == "x509_asn":
             return ssl.DER_cert_to_PEM_cert(data)
     pytest.skip("в хранилище Windows не нашлось ни одного корня")
+
+
+def test_empty_list_of_roots_is_not_installed(monkeypatch):
+    """Пустой набор корней не подменяет собой настоящие.
+
+    Переменные читает не только ssl, но и requests — им качает модель
+    huggingface_hub, — а он, в отличие от ssl, к хранилищу Windows уже не
+    обращается: указанный файл для него единственный источник. Пустой файл
+    означал бы «не верить никому»: скачивание падало бы там, где до нас
+    работало (проверено — NO_CERTIFICATE_OR_CRL_FOUND).
+    """
+    monkeypatch.setattr(certs, "_collect", lambda: "   ")
+    said: list[str] = []
+
+    assert certs.ensure(log=said.append) is None
+    assert said, "молчать об этом нельзя: скачивание останется как было"
+    for name in certs.VARIABLES:
+        assert name not in os.environ

@@ -52,6 +52,14 @@ def ensure(log: Log | None = None) -> Path | None:
 
     try:
         roots = _collect()
+        if "BEGIN CERTIFICATE" not in roots:
+            # Пустой файл — это «не верить никому», а не «оставить как было».
+            # Переменные читает и requests, которым качает модель
+            # huggingface_hub, а он, в отличие от ssl, к хранилищу Windows
+            # не обращается: указанный файл для него единственный источник.
+            # Скачивание упало бы там, где до нас работало.
+            say("Не нашлось ни одного корневого сертификата — оставляю всё как есть.")
+            return None
         path = bundle_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(roots, encoding="utf-8")
