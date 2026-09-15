@@ -251,9 +251,24 @@ def load(path: str | Path | None = None) -> Config:
         except tomllib.TOMLDecodeError as exc:
             raise ConfigError(
                 f"Не удалось прочитать {cfg_path}:\n{exc}\n\n"
-                "Частая причина — путь Windows в двойных кавычках: обратный слеш там "
-                "нужно удваивать. Проще записать путь в одинарных кавычках: "
+                "Проверьте синтаксис TOML. Если это путь Windows в двойных кавычках, "
+                "обратные слеши в нём нужно удваивать; проще записать путь в одинарных кавычках: "
                 r"'C:\Program Files\Typora\Typora.exe'"
             ) from exc
-        return Config(_merge(DEFAULTS, user), cfg_path, created_from)
+        data = _merge(DEFAULTS, user)
+        _validate(data)
+        return Config(data, cfg_path, created_from)
+    _validate(DEFAULTS)
     return Config(DEFAULTS, None)
+
+
+def _validate(data: dict[str, Any]) -> None:
+    """Проверить значения, от которых зависят границы циклов обработки."""
+    summary = data.get("summary", {})
+    for key, minimum in (("chunk_chars", 1), ("chunk_overlap_chars", 0)):
+        value = summary.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            bound = "положительное" if minimum else "неотрицательное"
+            raise ConfigError(
+                f"Некорректное значение [summary] {key}: ожидалось {bound} целое число."
+            )

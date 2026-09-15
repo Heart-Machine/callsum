@@ -90,6 +90,15 @@ def test_comment_at_the_end_of_the_line_survives():
     assert tomllib.loads(result)["summary"]["model"] == "qwen3:32b"
 
 
+def test_comment_after_section_header_does_not_duplicate_the_section():
+    text = "[view]  # чем открывать протокол\n"
+
+    result = settings.apply(text, {"view": {"markdown_app": "notepad"}})
+
+    assert result.count("[view]") == 1
+    assert tomllib.loads(result)["view"]["markdown_app"] == "notepad"
+
+
 def test_hash_inside_value_is_not_a_comment():
     text = "[view]\nmarkdown_app = 'obsidian://open?vault=work#заметки'\n"
 
