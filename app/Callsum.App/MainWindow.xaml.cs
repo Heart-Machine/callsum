@@ -630,15 +630,26 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        string? id = null;
         try
         {
             // Номер задания запоминается: по нему потом видно, что отказ ядра
             // относится к этой записи, а не к чужому вопросу.
-            _mine.Add(await _engine.ProcessAsync(path, force).ConfigureAwait(true));
             _queued++;
+            await _engine.ProcessAsync(path, force, assigned =>
+            {
+                id = assigned;
+                _mine.Add(assigned);
+            }).ConfigureAwait(true);
         }
         catch (EngineException exception)
         {
+            if (id is not null)
+            {
+                _mine.Remove(id);
+                _queued = Math.Max(0, _queued - 1);
+            }
+
             Append($"! {exception.Message}");
         }
     }
