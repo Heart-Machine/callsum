@@ -47,6 +47,40 @@ public class EngineClientTests
     }
 
     [Fact]
+    public async Task Номер_занимается_до_того_как_ядро_успеет_ответить()
+    {
+        var transport = new FakeEngineTransport();
+        await using var engine = new EngineClient(transport);
+        string? assigned = null;
+        var done = new TaskCompletionSource<EngineEvent.Done>();
+        engine.EventReceived += message =>
+        {
+            if (message is EngineEvent.Done value)
+            {
+                done.TrySetResult(value);
+            }
+        };
+        transport.Sent = command =>
+        {
+            var payload = JsonDocument.Parse(command).RootElement;
+            if (payload.GetProperty("cmd").GetString() != "process")
+            {
+                return;
+            }
+
+            var id = payload.GetProperty("id").GetString();
+            Assert.Equal(id, assigned);
+            transport.Push($"{{\"event\":\"done\",\"id\":\"{id}\",\"out_dir\":\"D:/out\",\"summary\":false}}");
+        };
+        await engine.StartAsync();
+
+        var id = await engine.ProcessAsync("созвон.mkv", onAssigned: value => assigned = value);
+
+        Assert.Equal(id, assigned);
+        Assert.Equal(id, (await WaitFor(done)).Id);
+    }
+
+    [Fact]
     public async Task Номера_заданий_не_повторяются()
     {
         var transport = new FakeEngineTransport();

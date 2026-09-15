@@ -13,6 +13,8 @@ public sealed class FakeEngineTransport : IEngineTransport
 
     public List<string> Commands { get; } = [];
 
+    public Action<string>? Sent { get; set; }
+
     public bool Disposed { get; private set; }
 
     public event Action<string>? Diagnostics;
@@ -26,6 +28,7 @@ public sealed class FakeEngineTransport : IEngineTransport
     public Task SendAsync(string line, CancellationToken cancellationToken)
     {
         Commands.Add(line);
+        Sent?.Invoke(line);
         return Task.CompletedTask;
     }
 

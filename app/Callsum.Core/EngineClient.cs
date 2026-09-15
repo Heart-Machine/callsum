@@ -55,8 +55,12 @@ public sealed class EngineClient : IAsyncDisposable
     }
 
     /// <summary>Поставить запись в обработку. Возвращает номер задания.</summary>
-    public Task<string> ProcessAsync(string path, bool force = false, CancellationToken cancellationToken = default)
-        => SendAsync(new { cmd = "process", path, force }, cancellationToken);
+    public Task<string> ProcessAsync(
+        string path,
+        bool force = false,
+        Action<string>? onAssigned = null,
+        CancellationToken cancellationToken = default) =>
+        SendAsync(new { cmd = "process", path, force }, cancellationToken, onAssigned: onAssigned);
 
     public Task<string> SummarizeAsync(string transcript, CancellationToken cancellationToken = default)
         => SendAsync(new { cmd = "summarize", transcript }, cancellationToken);
@@ -129,7 +133,8 @@ public sealed class EngineClient : IAsyncDisposable
     private async Task<string> SendAsync(
         object command,
         CancellationToken cancellationToken,
-        TaskCompletionSource<EngineEvent>? waiter = null)
+        TaskCompletionSource<EngineEvent>? waiter = null,
+        Action<string>? onAssigned = null)
     {
         var id = Interlocked.Increment(ref _lastId).ToString();
         if (waiter is not null)
@@ -138,6 +143,10 @@ public sealed class EngineClient : IAsyncDisposable
             // вернётся управление из записи в трубу.
             _waiting[id] = waiter;
         }
+
+        // Получатель команды может ответить сразу после записи в транспорт.
+        // Тому, кто отслеживает фоновую работу, номер нужен раньше этого момента.
+        onAssigned?.Invoke(id);
 
         var payload = JsonSerializer.SerializeToNode(command, SerializerOptions)!.AsObject();
         payload["id"] = id;
