@@ -29,6 +29,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>Задания, которые запускало это окно: ответы на них — его дело.</summary>
     private readonly HashSet<string> _mine = [];
+    private readonly Dictionary<string, Button> _reprocessButtons = [];
 
     private EngineClient? _engine;
     private SettingsWindow? _settings;
@@ -164,6 +165,7 @@ public sealed partial class MainWindow : Window
                 break;
 
             case EngineEvent.Done done:
+                RestoreReprocessButton(done.Id);
                 _queued = Math.Max(0, _queued - 1);
                 HideProgress(_queued > 0 ? "Готово, обрабатываю следующий" : "Готово");
                 Append(done.HasSummary
@@ -173,6 +175,7 @@ public sealed partial class MainWindow : Window
                 break;
 
             case EngineEvent.Failed failed:
+                RestoreReprocessButton(failed.Id);
                 _queued = Math.Max(0, _queued - 1);
                 HideProgress("Ошибка обработки");
                 Append($"! {failed.Message}");
@@ -209,6 +212,22 @@ public sealed partial class MainWindow : Window
         Progress.Visibility = Visibility.Collapsed;
         Progress.IsIndeterminate = false;
         Stage.Text = stage;
+    }
+
+    private void ShowQueueing(string stage)
+    {
+        Stage.Text = stage;
+        Progress.Visibility = Visibility.Visible;
+        Progress.IsIndeterminate = true;
+    }
+
+    private void RestoreReprocessButton(string? id)
+    {
+        if (id is { Length: > 0 } && _reprocessButtons.Remove(id, out var button))
+        {
+            button.Content = "Заново";
+            button.IsEnabled = true;
+        }
     }
 
     // --- список записей ------------------------------------------------
@@ -527,7 +546,7 @@ public sealed partial class MainWindow : Window
 
     private async void OnReprocessClick(object sender, RoutedEventArgs args)
     {
-        if (sender is not FrameworkElement { Tag: ResultRow row })
+        if (sender is not Button { Tag: ResultRow row } button)
         {
             return;
         }
@@ -543,7 +562,15 @@ public sealed partial class MainWindow : Window
         }
 
         Append($"Обрабатываю заново: {Path.GetFileName(path)}");
-        await ProcessAsync(path, force: true);
+        button.IsEnabled = false;
+        button.Content = "Добавляю…";
+        ShowQueueing("Добавляю в очередь…");
+
+        if (!await ProcessAsync(path, force: true, button))
+        {
+            button.Content = "Заново";
+            button.IsEnabled = true;
+        }
     }
 
     private void OnOpenFolderClick(object sender, RoutedEventArgs args)
@@ -622,12 +649,12 @@ public sealed partial class MainWindow : Window
         await ProcessAsync(path);
     });
 
-    private async Task ProcessAsync(string path, bool force = false)
+    private async Task<bool> ProcessAsync(string path, bool force = false, Button? reprocessButton = null)
     {
         if (_engine is null)
         {
             Append($"! Обработка пропущена: {EngineLocator.NotFoundMessage}");
-            return;
+            return false;
         }
 
         string? id = null;
@@ -640,7 +667,13 @@ public sealed partial class MainWindow : Window
             {
                 id = assigned;
                 _mine.Add(assigned);
+                if (reprocessButton is not null)
+                {
+                    _reprocessButtons[assigned] = reprocessButton;
+                    reprocessButton.Content = "В очереди";
+                }
             }).ConfigureAwait(true);
+            return true;
         }
         catch (EngineException exception)
         {
@@ -648,9 +681,11 @@ public sealed partial class MainWindow : Window
             {
                 _mine.Remove(id);
                 _queued = Math.Max(0, _queued - 1);
+                _reprocessButtons.Remove(id);
             }
 
             Append($"! {exception.Message}");
+            return false;
         }
     }
 

@@ -256,6 +256,35 @@ def test_queued_work_finishes_before_shutdown(cfg, monkeypatch):
     assert done == ["первый", "второй"]
 
 
+def test_settings_are_read_while_processing_is_running(cfg, monkeypatch):
+    """Окно настроек не ждёт окончания долгой расшифровки."""
+    import threading
+
+    from callsum.serve import Engine
+
+    started = threading.Event()
+    release = threading.Event()
+    events: list[dict] = []
+
+    def slow_process(command):
+        started.set()
+        assert release.wait(5)
+
+    engine = Engine(cfg, events.append)
+    monkeypatch.setattr(engine, "_process", slow_process)
+    engine.start()
+    engine.submit({"cmd": "process", "id": "recording"})
+    assert started.wait(5)
+
+    engine.submit({"cmd": "settings", "id": "settings"})
+    settings = next(event for event in events if event["event"] == "settings")
+    assert settings["id"] == "settings"
+    assert settings["values"]["paths"]["out"] == str(cfg.path("out"))
+
+    release.set()
+    engine.stop(timeout=5)
+
+
 def test_commands_sent_before_shutdown_are_executed(cfg, monkeypatch):
     """shutdown приходит сразу за командой — она всё равно должна выполниться."""
     calls: list[dict] = []

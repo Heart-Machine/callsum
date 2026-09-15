@@ -59,6 +59,7 @@ public sealed partial class SettingsWindow : Window
         _ui = DispatcherQueue.GetForCurrentThread();
 
         AppWindow.Resize(new SizeInt32(960, 840));
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "callsum-icon.ico"));
 
         _pages["folders"] = PageFolders;
         _pages["record"] = PageRecord;
