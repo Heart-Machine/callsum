@@ -46,6 +46,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = TitleIdle;
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "callsum-icon.ico"));
 
         _ui = DispatcherQueue.GetForCurrentThread();
         Results.ItemsSource = _results;

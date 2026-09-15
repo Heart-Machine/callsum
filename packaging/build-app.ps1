@@ -100,6 +100,7 @@ vpk pack `
     --packVersion $Version `
     --packDir $publish `
     --mainExe Callsum.App.exe `
+    --icon (Join-Path $root 'app\Callsum.App\Assets\callsum-icon.ico') `
     --packTitle callsum `
     --packAuthors 'Heart-Machine' `
     --outputDir $releases
