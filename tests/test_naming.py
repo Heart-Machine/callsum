@@ -1,10 +1,11 @@
 """Тесты шаблона имени папки с результатами."""
 
 from datetime import datetime
+import json
 
 import pytest
 
-from callsum.naming import folder_name, sanitize
+from callsum.naming import folder_name, result_dir, sanitize
 
 WHEN = datetime(2026, 9, 12, 14, 3, 11)
 
@@ -31,6 +32,22 @@ def test_empty_template_falls_back_to_the_name(src):
 def test_unknown_placeholder_is_left_as_is(src):
     """Опечатка в шаблоне не должна ронять обработку уже записанного созвона."""
     assert folder_name(src, "{nmae} {date}", WHEN) == "{nmae} 2026-09-12"
+
+
+def test_result_directory_does_not_reuse_another_recordings_folder(tmp_path):
+    first = tmp_path / "клиент" / "meeting.mkv"
+    second = tmp_path / "внутренний" / "meeting.mp4"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    first.write_bytes(b"")
+    second.write_bytes(b"")
+    occupied = tmp_path / "out" / "meeting"
+    occupied.mkdir(parents=True)
+    (occupied / "transcript.json").write_text(
+        '{"source": ' + json.dumps(str(first.resolve()), ensure_ascii=False) + '}', encoding="utf-8")
+
+    assert result_dir(first, tmp_path / "out", "{name}") == occupied
+    assert result_dir(second, tmp_path / "out", "{name}") == tmp_path / "out" / "meeting (2)"
 
 
 def test_forbidden_characters_are_replaced(src):

@@ -133,8 +133,8 @@ class Engine:
             return
 
         out_root = self.cfg.path("out")
-        folder = naming.folder_name(src, self.cfg.paths.get("folder_template", ""))
-        done = out_root / folder / "transcript.md"
+        out_dir = naming.result_dir(src, out_root, self.cfg.paths.get("folder_template", ""))
+        done = out_dir / "transcript.md"
         if done.exists() and not command.get("force"):
             self.emit({"event": "log", "id": request_id, "text": f"{src.name}: уже обработан"})
             self.emit({

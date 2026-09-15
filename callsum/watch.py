@@ -18,7 +18,7 @@ def _candidates(folder: Path, exts: set[str]) -> list[Path]:
 
 
 def _is_done(src: Path, out_root: Path, template: str = "") -> bool:
-    return (out_root / naming.folder_name(src, template) / "transcript.md").exists()
+    return (naming.result_dir(src, out_root, template) / "transcript.md").exists()
 
 
 def _is_stable(src: Path, seconds: float) -> bool:

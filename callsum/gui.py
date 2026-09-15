@@ -64,11 +64,11 @@ class Worker(QObject):
     @Slot(str, bool)
     def handle(self, path: str, force: bool) -> None:
         src = Path(path)
-        folder = naming.folder_name(src, self.cfg.paths.get("folder_template", ""))
-        done = self.cfg.path("out") / folder / "transcript.md"
+        out_dir = naming.result_dir(src, self.cfg.path("out"), self.cfg.paths.get("folder_template", ""))
+        done = out_dir / "transcript.md"
         if done.exists() and not force:
             self.message.emit(f"{src.name}: уже обработан, пропускаю")
-            self.done.emit(folder, str(done.parent), (done.parent / "summary.md").exists())
+            self.done.emit(out_dir.name, str(done.parent), (done.parent / "summary.md").exists())
             return
         try:
             if self._transcriber is None:
