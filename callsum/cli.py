@@ -49,8 +49,8 @@ def cmd_process(args, cfg) -> int:
     transcriber: Transcriber | None = None
     failed = 0
     for src in files:
-        folder = naming.folder_name(src, cfg.paths.get("folder_template", ""))
-        if not args.force and (out_root / folder / "transcript.md").exists():
+        out_dir = naming.result_dir(src, out_root, cfg.paths.get("folder_template", ""))
+        if not args.force and (out_dir / "transcript.md").exists():
             print(f"= {src.name}: уже обработан (--force чтобы переделать)")
             continue
         try:
