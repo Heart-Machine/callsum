@@ -4,6 +4,8 @@ import shutil
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from callsum import config
 
 
@@ -154,6 +156,15 @@ def test_partial_config_falls_back_to_defaults(tmp_path):
     assert cfg.summary["model"] == "qwen3:8b"
     assert cfg.summary["num_ctx"] == config.DEFAULTS["summary"]["num_ctx"]
     assert cfg.transcribe["model"] == config.DEFAULTS["transcribe"]["model"]
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_non_positive_summary_chunk_size_is_rejected(tmp_path, value):
+    target = tmp_path / "config.toml"
+    target.write_text(f"[summary]\nchunk_chars = {value}\n", encoding="utf-8")
+
+    with pytest.raises(config.ConfigError, match="chunk_chars"):
+        config.load(target)
 
 
 def test_moved_settings_are_reported_as_moved(tmp_path, monkeypatch):

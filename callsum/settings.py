@@ -35,7 +35,8 @@ def format_value(value: Any) -> str:
 
 
 def _section_of(line: str) -> str | None:
-    stripped = line.strip()
+    comment = _comment_start(line)
+    stripped = line[:comment].strip() if comment is not None else line.strip()
     if stripped.startswith("[") and stripped.endswith("]"):
         return stripped[1:-1].strip()
     return None
@@ -50,16 +51,27 @@ def _key_of(line: str) -> str | None:
 
 def _trailing_comment(line: str) -> str:
     """Комментарий в конце строки, если он там есть и не внутри кавычек."""
+    position = _comment_start(line)
+    return "  " + line[position:].strip() if position is not None else ""
+
+
+def _comment_start(line: str) -> int | None:
+    """Позиция комментария TOML вне строкового литерала."""
     quote: str | None = None
+    escaped = False
     for position, symbol in enumerate(line):
         if quote is not None:
-            if symbol == quote:
+            if quote == '"' and escaped:
+                escaped = False
+            elif quote == '"' and symbol == "\\":
+                escaped = True
+            elif symbol == quote:
                 quote = None
         elif symbol in "\"'":
             quote = symbol
         elif symbol == "#":
-            return "  " + line[position:].strip()
-    return ""
+            return position
+    return None
 
 
 def apply(text: str, changes: Changes) -> str:
