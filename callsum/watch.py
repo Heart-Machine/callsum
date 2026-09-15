@@ -44,10 +44,9 @@ def run(cfg, once: bool = False, interval: float = 10.0, do_summary: bool = True
         log("Останов — Ctrl+C.\n")
 
     transcriber: Transcriber | None = None
-    seen_failed: set[Path] = set()
     while True:
         for src in _candidates(folder, exts):
-            if _is_done(src, out_root, cfg.paths.get("folder_template", "")) or src in seen_failed:
+            if _is_done(src, out_root, cfg.paths.get("folder_template", "")):
                 continue
             if not _is_stable(src, stable):
                 log(f"…{src.name} ещё пишется, жду")
@@ -57,8 +56,7 @@ def run(cfg, once: bool = False, interval: float = 10.0, do_summary: bool = True
                     transcriber = Transcriber(cfg)
                 process(src, cfg, do_summary=do_summary, transcriber=transcriber, log=log)
             except Exception as exc:  # noqa: BLE001 — одна битая запись не должна ронять службу
-                seen_failed.add(src)
-                log(f"! Ошибка на {src.name}: {exc}")
+                log(f"! Ошибка на {src.name}: {exc}; повторю на следующем обходе")
         if once:
             return
         time.sleep(interval)
