@@ -82,6 +82,15 @@ class Engine:
             self._thread.join(timeout)
 
     def submit(self, command: dict) -> None:
+        # Форму настроек открывают и во время долгой расшифровки. Текущую
+        # конфигурацию можно отдать сразу: запись настроек по-прежнему идёт
+        # через рабочую очередь и не меняет снимок текущей записи.
+        if command.get("cmd") == "settings":
+            try:
+                self._settings(command)
+            except Exception as exc:  # noqa: BLE001 -- ошибка файла не роняет мотор
+                self.emit({"event": "error", "id": command.get("id"), "message": str(exc)})
+            return
         self._queue.put(command)
 
     def _loop(self) -> None:

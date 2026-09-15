@@ -40,6 +40,11 @@ public sealed class Notifications
             SetCurrentProcessExplicitAppUserModelID(AppId);
             using var key = Registry.CurrentUser.CreateSubKey($@"Software\Classes\AppUserModelId\{AppId}");
             key?.SetValue("DisplayName", DisplayName, RegistryValueKind.String);
+            key?.SetValue(
+                "IconUri",
+                Path.Combine(AppContext.BaseDirectory, "Assets", "callsum-icon.png"),
+                RegistryValueKind.ExpandString);
+            ToastShortcut.Install(AppId, DisplayName);
             _notifier = ToastNotificationManager.CreateToastNotifier(AppId);
         }
         catch (Exception exception) when (exception is COMException or UnauthorizedAccessException
