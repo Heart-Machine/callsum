@@ -18,6 +18,7 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\callsum-icon.ico</ApplicationIcon>
     <!-- Точка входа своя (Program.cs): Velopack должен отработать служебные
          ключи установки и обновления раньше, чем появится окно. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
@@ -34,6 +35,12 @@
   <ItemGroup>
     <ProjectReference Include="..\Callsum.Obs\Callsum.Obs.csproj" />
     <ProjectReference Include="..\Callsum.Core\Callsum.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\callsum-icon.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
