@@ -190,7 +190,8 @@
                                     x:Name="AutoSwitch"
                                     Header="Переключаться на профиль callsum перед записью"
                                     OnContent="Да"
-                                    OffContent="Нет" />
+                                    OffContent="Нет"
+                                    Toggled="OnAutoSwitchToggled" />
 
                                 <ToggleSwitch
                                     x:Name="RestoreAfter"
@@ -235,13 +236,13 @@
                                                 x:Name="ObsPort"
                                                 HorizontalAlignment="Left"
                                                 Width="200"
-                                                Minimum="1"
+                                                Minimum="0"
                                                 Maximum="65535"
                                                 SpinButtonPlacementMode="Compact" />
                                             <TextBlock
                                                 x:Name="ObsPortHint"
                                                 Style="{StaticResource Hint}"
-                                                Text="Обычно это 4455 — значение по умолчанию OBS." />
+                                                Text="0 — стандартный порт WebSocket OBS (4455)." />
                                         </StackPanel>
 
                                         <StackPanel Style="{StaticResource Field}">

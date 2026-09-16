@@ -220,6 +220,10 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
+    private void OnAutoSwitchToggled(object sender, RoutedEventArgs args) => UpdateProfileSwitches();
+
+    private void UpdateProfileSwitches() => RestoreAfter.IsEnabled = AutoSwitch.IsOn;
+
     private void Select(string tab)
     {
         foreach (var item in Tabs.MenuItems.OfType<NavigationViewItem>())
@@ -257,6 +261,7 @@ public sealed partial class SettingsWindow : Window
             field.Show(settings);
             field.ShowHint(settings);
         }
+        UpdateProfileSwitches();
 
         try
         {
