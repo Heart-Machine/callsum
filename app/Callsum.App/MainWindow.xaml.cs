@@ -96,6 +96,7 @@ public sealed partial class MainWindow : Window
             // настройках. Проверка окружения заодно приносит их, и окно узнаёт,
             // где искать готовые записи.
             await engine.DoctorAsync().ConfigureAwait(false);
+            await engine.GetSettingsAsync().ConfigureAwait(false);
         }
         catch (EngineException exception)
         {
@@ -163,6 +164,9 @@ public sealed partial class MainWindow : Window
                     settings.ResolvedPath("out"),
                     settings.ResolvedPath("recordings"),
                     settings.Text("view", "markdown_app"));
+                UpdateRecordProfileNote(
+                    settings.Flag("obs", "auto_switch"),
+                    settings.Flag("obs", "restore_after"));
                 break;
 
             case EngineEvent.Done done:
@@ -245,6 +249,14 @@ public sealed partial class MainWindow : Window
             _ = ReloadResultsAsync();
         }
     }
+
+    private void UpdateRecordProfileNote(bool autoSwitch, bool restoreAfter) =>
+        RecordProfileNote.Text = (autoSwitch, restoreAfter) switch
+        {
+            (true, true) => "Запись ведёт OBS: приложение переключает его на свой профиль и возвращает прежний после остановки.",
+            (true, false) => "Запись ведёт OBS: приложение переключает его на свой профиль перед началом записи.",
+            _ => "Запись ведёт OBS: приложение не переключает профиль перед записью.",
+        };
 
     /// <summary>
     /// Проследить, чтобы OBS писал записи туда, где их ищет ядро.

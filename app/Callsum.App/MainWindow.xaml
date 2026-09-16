@@ -140,6 +140,7 @@
                 <Grid>
                     <ListView
                         x:Name="Results"
+                        Padding="0,0,12,0"
                         SelectionMode="None"
                         IsItemClickEnabled="True"
                         ItemClick="OnResultClick">
@@ -209,6 +210,7 @@
         </Expander>
 
         <TextBlock
+            x:Name="RecordProfileNote"
             Grid.Row="6"
             Opacity="0.6"
             FontSize="12"
