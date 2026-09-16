@@ -14,7 +14,6 @@ public class ObsSettingsTests : IDisposable
         Assert.Equal("127.0.0.1", settings.Host);
         Assert.Equal(ObsSettings.DefaultPort, settings.Port);
         Assert.Equal("", settings.Password);
-        Assert.True(settings.EnabledInObs);
     }
 
     [Fact]

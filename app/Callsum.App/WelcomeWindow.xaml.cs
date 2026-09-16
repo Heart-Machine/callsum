@@ -50,13 +50,13 @@ public sealed partial class WelcomeWindow : Window
 
         try
         {
-            var doctor = await CheckEngineAsync();
-            if (doctor is not null)
+            var engine = await CheckEngineAsync();
+            if (engine?.Doctor is { } doctor)
             {
                 AddDoctorChecks(doctor);
             }
 
-            await CheckObsAsync();
+            await CheckObsAsync(engine?.Settings);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -78,7 +78,7 @@ public sealed partial class WelcomeWindow : Window
         }
     }
 
-    private async Task<EngineEvent.Doctor?> CheckEngineAsync()
+    private async Task<EngineCheck?> CheckEngineAsync()
     {
         var executable = EngineLocator.Find();
         if (executable is null)
@@ -95,9 +95,10 @@ public sealed partial class WelcomeWindow : Window
         {
             await engine.StartAsync(timeout.Token);
             var doctor = await engine.GetDoctorAsync(timeout.Token);
+            var settings = await engine.GetSettingsAsync(timeout.Token);
             Checks.Clear();
             Add(WelcomeKind.Ready, "Ядро обработки", $"Готово: {doctor.Version ?? "версия не указана"}.");
-            return doctor;
+            return new EngineCheck(doctor, settings);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -178,12 +179,31 @@ public sealed partial class WelcomeWindow : Window
         }
     }
 
-    private async Task CheckObsAsync()
+    private async Task CheckObsAsync(EngineEvent.Settings? appSettings)
     {
-        var settings = ObsSettings.Load();
-        if (!settings.EnabledInObs)
+        if (appSettings is null)
         {
-            Add(WelcomeKind.Problem, "OBS", "WebSocket-сервер выключен. Включите его в настройках OBS.");
+            Add(
+                WelcomeKind.Problem,
+                "OBS",
+                "Настройки callsum не прочитаны, поэтому подключение к OBS не проверено.");
+            return;
+        }
+
+        ObsSettings settings;
+        try
+        {
+            var port = (int)(appSettings.Number("obs", "port") ?? ObsSettings.DefaultPort);
+            settings = new ObsSettings
+            {
+                Host = appSettings.Text("obs", "host"),
+                Port = port is 0 ? ObsSettings.DefaultPort : port,
+                Password = ObsCredentials.Read(),
+            };
+        }
+        catch (ObsCredentialsException exception)
+        {
+            Add(WelcomeKind.Problem, "OBS", exception.Message);
             return;
         }
 
@@ -198,8 +218,8 @@ public sealed partial class WelcomeWindow : Window
                 setup.Ready ? WelcomeKind.Ready : WelcomeKind.Problem,
                 "OBS",
                 setup.Ready
-                    ? "Подключён, профиль и коллекция callsum готовы к записи."
-                    : "Подключён, но профиль или коллекция callsum отсутствуют. Их можно создать из главного окна.");
+                    ? $"Подключён на {settings.Host}:{settings.Port}, профиль и коллекция callsum готовы к записи."
+                    : $"Подключён на {settings.Host}:{settings.Port}, но профиль или коллекция callsum отсутствуют. Их можно создать из главного окна.");
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -207,7 +227,10 @@ public sealed partial class WelcomeWindow : Window
         }
         catch (Exception exception) when (exception is ObsException or OperationCanceledException)
         {
-            Add(WelcomeKind.Problem, "OBS", "Не удалось подключиться к OBS. Запись из приложения пока недоступна.");
+            Add(
+                WelcomeKind.Problem,
+                "OBS",
+                $"Не удалось подключиться к OBS на {settings.Host}:{settings.Port}. Запись из приложения пока недоступна.");
         }
     }
 
@@ -225,6 +248,9 @@ public sealed partial class WelcomeWindow : Window
         Close();
     }
 }
+
+/// <summary>Результат запуска ядра: его отчёт и настройки для проверки OBS.</summary>
+internal sealed record EngineCheck(EngineEvent.Doctor Doctor, EngineEvent.Settings Settings);
 
 public sealed class WelcomeCheck
 {
