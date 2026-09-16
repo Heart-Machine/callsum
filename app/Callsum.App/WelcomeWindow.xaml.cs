@@ -19,6 +19,7 @@ public sealed partial class WelcomeWindow : Window
     private readonly bool _saveChoice;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _closed;
+    private bool _checking;
 
     public ObservableCollection<WelcomeCheck> Checks { get; } = [];
 
@@ -46,7 +47,19 @@ public sealed partial class WelcomeWindow : Window
 
     private async Task CheckAsync()
     {
+        if (_closed || _checking)
+        {
+            return;
+        }
+
+        _checking = true;
+        Checks.Clear();
         Checks.Add(WelcomeCheck.Checking());
+        Checking.Visibility = Visibility.Visible;
+        Checking.IsActive = true;
+        Subtitle.Text = "Проверяем, всё ли готово к первому созвону";
+        RefreshButton.IsEnabled = false;
+        ContinueButton.IsEnabled = false;
 
         try
         {
@@ -70,9 +83,11 @@ public sealed partial class WelcomeWindow : Window
         {
             if (!_closed)
             {
+                _checking = false;
                 Checking.IsActive = false;
                 Checking.Visibility = Visibility.Collapsed;
                 Subtitle.Text = "Проверка завершена";
+                RefreshButton.IsEnabled = true;
                 ContinueButton.IsEnabled = true;
             }
         }
@@ -236,6 +251,8 @@ public sealed partial class WelcomeWindow : Window
 
     private void Add(WelcomeKind kind, string title, string detail) =>
         Checks.Add(new WelcomeCheck(kind, title, detail));
+
+    private void OnRefreshClick(object sender, RoutedEventArgs args) => _ = CheckAsync();
 
     private void OnContinueClick(object sender, RoutedEventArgs args)
     {
