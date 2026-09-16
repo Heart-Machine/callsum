@@ -111,6 +111,23 @@ def test_model_list_survives_a_timeout(monkeypatch):
         summarize.available_models("http://127.0.0.1:11434")
 
 
+def test_empty_transcript_is_never_sent_to_ollama(monkeypatch):
+    """Модель на пустом вводе уверенно придумывает несуществующий созвон."""
+    monkeypatch.setattr(
+        summarize, "_generate", lambda *_args: pytest.fail("Ollama не должна вызываться"))
+
+    with pytest.raises(summarize.EmptyTranscriptError) as failure:
+        summarize.summarize("", "- Файл: без речи.mkv", None)
+
+    assert "нет распознанной речи" in str(failure.value)
+
+
+def test_empty_dialog_does_not_turn_document_metadata_into_speech():
+    raw = "# Расшифровка\n\n- Файл: без речи.mkv\n\n---\n\n"
+
+    assert summarize.dialog_from_document(raw) == ""
+
+
 def test_long_reply_is_cut_to_fit_the_chunk():
     """Один говорящий без пауз даёт одну реплику — длиннее куска целиком.
 

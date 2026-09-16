@@ -17,6 +17,19 @@ class OllamaError(RuntimeError):
     pass
 
 
+class EmptyTranscriptError(OllamaError):
+    """Расшифровка готова, но в ней нет реплик для протокола."""
+
+
+EMPTY_TRANSCRIPT_MESSAGE = "В расшифровке нет распознанной речи — протокол не создан."
+
+
+def dialog_from_document(raw: str) -> str:
+    """Достать реплики из transcript.md, не выдавая его шапку за диалог."""
+    _, separator, dialog = raw.partition("\n---\n")
+    return (dialog if separator else raw).strip()
+
+
 def _fetch(target, host: str, timeout: int, model: str = "") -> dict:
     """Сходить к Ollama и вернуть разобранный ответ.
 
@@ -169,6 +182,9 @@ def _word_break(line: str, limit: int) -> int:
 
 def summarize(transcript: str, meta: str, cfg, log=print) -> str:
     """Построить протокол. Длинные созвоны обрабатываются по частям (map-reduce)."""
+    if not transcript.strip():
+        # Пустая запись не является поводом просить языковую модель придумать созвон.
+        raise EmptyTranscriptError(EMPTY_TRANSCRIPT_MESSAGE)
     s = cfg.summary
     parts = _chunks(transcript, int(s["chunk_chars"]), int(s["chunk_overlap_chars"]))
     if len(parts) == 1:
