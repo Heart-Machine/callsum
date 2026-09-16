@@ -56,7 +56,7 @@ public sealed partial class MainWindow : Window
         _notifications = new Notifications(Append);
         _notifications.Register();
 
-        _obs = new ObsConnection(ObsSettings.Load());
+        _obs = new ObsConnection();
         _obs.StateChanged += OnConnectionChanged;
         _obs.RecordStateChanged += OnRecordStateChanged;
         _obs.Log += message => _ui.TryEnqueue(() => Append(message));
@@ -68,7 +68,6 @@ public sealed partial class MainWindow : Window
 
         _updates = new Updates(message => _ui.TryEnqueue(() => Append(message)));
 
-        _obs.Start();
         _ = StartEngineAsync();
         _ = CheckUpdatesAsync();
     }
@@ -96,7 +95,7 @@ public sealed partial class MainWindow : Window
             // настройках. Проверка окружения заодно приносит их, и окно узнаёт,
             // где искать готовые записи.
             await engine.DoctorAsync().ConfigureAwait(false);
-            await engine.GetSettingsAsync().ConfigureAwait(false);
+            await ConfigureObsAsync(await engine.GetSettingsAsync().ConfigureAwait(false));
         }
         catch (EngineException exception)
         {
@@ -167,6 +166,7 @@ public sealed partial class MainWindow : Window
                 UpdateRecordProfileNote(
                     settings.Flag("obs", "auto_switch"),
                     settings.Flag("obs", "restore_after"));
+                _ = ConfigureObsAsync(settings);
                 break;
 
             case EngineEvent.Done done:
@@ -186,6 +186,25 @@ public sealed partial class MainWindow : Window
                 Append($"! {failed.Message}");
                 _notifications.Show("Запись не обработана", failed.Message);
                 break;
+        }
+    }
+
+    /// <summary>Данные адреса живут в config.toml, секрет — только в Windows.</summary>
+    private async Task ConfigureObsAsync(EngineEvent.Settings settings)
+    {
+        try
+        {
+            var port = (int)(settings.Number("obs", "port") ?? ObsSettings.DefaultPort);
+            await _obs.ConfigureAsync(new ObsSettings
+            {
+                Host = settings.Text("obs", "host"),
+                Port = port is 0 ? ObsSettings.DefaultPort : port,
+                Password = ObsCredentials.Read(),
+            }).ConfigureAwait(false);
+        }
+        catch (ObsCredentialsException exception)
+        {
+            _ui.TryEnqueue(() => Append($"! {exception.Message}"));
         }
     }
 

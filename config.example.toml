@@ -61,10 +61,10 @@ filename_format = "%CCYY-%MM-%DD %hh-%mm-%ss"
 auto_switch = true
 # После остановки вернуть тот профиль, что был до записи.
 restore_after = true
-# Хост websocket-сервера OBS. Порт и пароль берутся из настроек самого OBS;
-# port = 0 означает «спросить у OBS», ненулевое значение перекрывает его.
+# Хост и порт websocket-сервера OBS. Пароль задаётся в окне настроек callsum
+# и хранится в Диспетчере учётных данных Windows, а не в этом файле.
 host = "127.0.0.1"
-port = 0
+port = 4455
 
 [summary]
 enabled = true

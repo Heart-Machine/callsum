@@ -44,6 +44,7 @@ public sealed partial class SettingsWindow : Window
     private EngineEvent.Settings? _loaded;
     private string _microphone = "";
     private string _systemAudio = "";
+    private string _savedObsPassword = "";
     private string _tab = "";
     private bool _modelsAsked;
     private bool _aboutAsked;
@@ -219,6 +220,10 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
+    private void OnAutoSwitchToggled(object sender, RoutedEventArgs args) => UpdateProfileSwitches();
+
+    private void UpdateProfileSwitches() => RestoreAfter.IsEnabled = AutoSwitch.IsOn;
+
     private void Select(string tab)
     {
         foreach (var item in Tabs.MenuItems.OfType<NavigationViewItem>())
@@ -256,6 +261,17 @@ public sealed partial class SettingsWindow : Window
             field.Show(settings);
             field.ShowHint(settings);
         }
+        UpdateProfileSwitches();
+
+        try
+        {
+            _savedObsPassword = ObsCredentials.Read();
+            ObsPassword.Password = _savedObsPassword;
+        }
+        catch (ObsCredentialsException exception)
+        {
+            Status.Text = exception.Message;
+        }
 
         Form.IsEnabled = true;
         Save.IsEnabled = true;
@@ -285,7 +301,8 @@ public sealed partial class SettingsWindow : Window
 
         var changes = Collect(settings);
         var devices = CollectDevices();
-        if (changes.Count == 0 && devices.Count == 0)
+        var passwordChanged = ObsPassword.Password != _savedObsPassword;
+        if (changes.Count == 0 && devices.Count == 0 && !passwordChanged)
         {
             Status.Text = "Менять нечего";
             return;
@@ -297,9 +314,10 @@ public sealed partial class SettingsWindow : Window
         {
             var done = new List<string>();
             var notes = new List<string>();
+            var savedSettings = settings;
             if (changes.Count > 0)
             {
-                Show(await _engine.SaveSettingsAsync(changes));
+                savedSettings = await _engine.SaveSettingsAsync(changes);
                 done.Add(Describe(changes));
 
                 // Куда писать запись, решает профиль OBS, а не наши настройки.
@@ -319,6 +337,14 @@ public sealed partial class SettingsWindow : Window
                 }
             }
 
+            if (passwordChanged)
+            {
+                ObsCredentials.Save(ObsPassword.Password);
+                _savedObsPassword = ObsPassword.Password;
+                await _obs.ConfigureAsync(ObsConnectionSettings(savedSettings, _savedObsPassword));
+                done.Add("пароль WebSocket OBS");
+            }
+
             // Устройства уходят в OBS, а не в config.toml: они живут в его
             // коллекции сцен вместе с источниками.
             foreach (var (input, device) in devices)
@@ -334,10 +360,12 @@ public sealed partial class SettingsWindow : Window
                 done.Add($"устройство «{input}»");
             }
 
+            Show(savedSettings);
+
             Status.Text = $"Сохранено: {string.Join(", ", done)}"
                           + (notes.Count > 0 ? $". Но {string.Join("; ", notes)}" : "");
         }
-        catch (Exception exception) when (exception is EngineException or TimeoutException)
+        catch (Exception exception) when (exception is EngineException or TimeoutException or ObsCredentialsException)
         {
             Status.Text = exception.Message;
         }
@@ -373,6 +401,17 @@ public sealed partial class SettingsWindow : Window
         changes.TryGetValue("paths", out var paths) && paths.TryGetValue("recordings", out var value)
             ? value as string
             : null;
+
+    private static ObsSettings ObsConnectionSettings(EngineEvent.Settings settings, string password)
+    {
+        var port = (int)(settings.Number("obs", "port") ?? ObsSettings.DefaultPort);
+        return new ObsSettings
+        {
+            Host = settings.Text("obs", "host"),
+            Port = port is 0 ? ObsSettings.DefaultPort : port,
+            Password = password,
+        };
+    }
 
     private async void OnBrowseClick(object sender, RoutedEventArgs args)
     {

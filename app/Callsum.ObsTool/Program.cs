@@ -7,7 +7,7 @@ using Callsum.Obs;
 Console.OutputEncoding = Encoding.UTF8;
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : "doctor";
-var settings = ObsSettings.Load();
+var settings = new ObsSettings { Password = ObsCredentials.Read() };
 
 await using var client = new ObsClient(settings);
 try
