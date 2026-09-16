@@ -98,7 +98,10 @@ public sealed partial class WelcomeWindow : Window
         catch (OperationCanceledException)
         {
             Checks.Clear();
-            Add(WelcomeKind.Problem, "Ядро обработки не отвечает", "Проверка не получила ответ за 10 секунд.");
+            Add(
+                WelcomeKind.Problem,
+                "Ядро обработки долго не отвечает",
+                "Можно продолжить и проверить состояние в главном окне.");
             return null;
         }
         catch (Exception exception) when (exception is EngineException or IOException or TimeoutException)
