@@ -714,6 +714,15 @@ public sealed partial class MainWindow : Window
             // получить и в этом случае, а не только при чтении настроек.
             _ = SyncRecordFolderAsync();
             _ = CheckObsSetupAsync();
+
+            // «Жду OBS» ставится после обрыва. Когда связь вернулась, эта
+            // подпись больше не описывает состояние окна, но ход записи или
+            // обработки затирать тоже нельзя.
+            if (_recordingSince is null && _queued == 0 && !_pending
+                && Progress.Visibility == Visibility.Collapsed)
+            {
+                Stage.Text = "Готов к записи";
+            }
         }
 
         if (!connected)
