@@ -20,6 +20,7 @@ public sealed partial class WelcomeWindow : Window
     private readonly CancellationTokenSource _lifetime = new();
     private bool _closed;
     private bool _checking;
+    private List<WelcomeCheck>? _report;
 
     public ObservableCollection<WelcomeCheck> Checks { get; } = [];
 
@@ -53,6 +54,7 @@ public sealed partial class WelcomeWindow : Window
         }
 
         _checking = true;
+        var report = _report = [];
         Checks.Clear();
         Checks.Add(WelcomeCheck.Checking());
         Checking.Visibility = Visibility.Visible;
@@ -81,9 +83,18 @@ public sealed partial class WelcomeWindow : Window
         }
         finally
         {
+            _report = null;
+            _checking = false;
             if (!_closed)
             {
-                _checking = false;
+                // До этого момента результаты накапливались отдельно: иначе
+                // готовые части появлялись раньше медленной проверки OBS.
+                Checks.Clear();
+                foreach (var check in report)
+                {
+                    Checks.Add(check);
+                }
+
                 Checking.IsActive = false;
                 Checking.Visibility = Visibility.Collapsed;
                 Subtitle.Text = "Проверка завершена";
@@ -98,7 +109,7 @@ public sealed partial class WelcomeWindow : Window
         var executable = EngineLocator.Find();
         if (executable is null)
         {
-            Checks.Clear();
+            ClearReport();
             Add(WelcomeKind.Problem, "Ядро обработки не найдено", EngineLocator.NotFoundMessage);
             return null;
         }
@@ -111,7 +122,7 @@ public sealed partial class WelcomeWindow : Window
             await engine.StartAsync(timeout.Token);
             var doctor = await engine.GetDoctorAsync(timeout.Token);
             var settings = await engine.GetSettingsAsync(timeout.Token);
-            Checks.Clear();
+            ClearReport();
             Add(WelcomeKind.Ready, "Ядро обработки", $"Готово: {doctor.Version ?? "версия не указана"}.");
             return new EngineCheck(doctor, settings);
         }
@@ -121,7 +132,7 @@ public sealed partial class WelcomeWindow : Window
         }
         catch (OperationCanceledException)
         {
-            Checks.Clear();
+            ClearReport();
             Add(
                 WelcomeKind.Problem,
                 "Ядро обработки долго не отвечает",
@@ -130,7 +141,7 @@ public sealed partial class WelcomeWindow : Window
         }
         catch (Exception exception) when (exception is EngineException or IOException or TimeoutException)
         {
-            Checks.Clear();
+            ClearReport();
             Add(WelcomeKind.Problem, "Ядро обработки не запускается", exception.Message);
             return null;
         }
@@ -250,7 +261,11 @@ public sealed partial class WelcomeWindow : Window
     }
 
     private void Add(WelcomeKind kind, string title, string detail) =>
-        Checks.Add(new WelcomeCheck(kind, title, detail));
+        Report.Add(new WelcomeCheck(kind, title, detail));
+
+    private ICollection<WelcomeCheck> Report => _report is not null ? _report : Checks;
+
+    private void ClearReport() => Report.Clear();
 
     private void OnRefreshClick(object sender, RoutedEventArgs args) => _ = CheckAsync();
 
