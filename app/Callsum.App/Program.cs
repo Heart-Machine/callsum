@@ -3,6 +3,8 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Velopack;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Callsum.App.Tests")]
+
 namespace Callsum.App;
 
 /// <summary>
