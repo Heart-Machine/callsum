@@ -20,6 +20,8 @@ public sealed partial class MainWindow : Window
 {
     private const string TitleIdle = "callsum";
     private const string TitleRecording = "callsum — Идёт запись";
+    private static readonly string[] DefaultRecordingExtensions =
+        [".mkv", ".mp4", ".mka", ".m4a", ".mp3", ".wav", ".flac", ".opus", ".webm"];
 
     private readonly DispatcherQueue _ui;
     private readonly ObsConnection _obs;
@@ -39,6 +41,7 @@ public sealed partial class MainWindow : Window
     private string? _markdownApp;
     private string? _recordingsFolder;
     private string? _recordFolderNote;
+    private IReadOnlyList<string> _recordingExtensions = DefaultRecordingExtensions;
     private bool _pending;
     private bool _obsSetupOffered;
     private bool _warned;
@@ -163,6 +166,7 @@ public sealed partial class MainWindow : Window
                     settings.ResolvedPath("out"),
                     settings.ResolvedPath("recordings"),
                     settings.Text("view", "markdown_app"));
+                _recordingExtensions = settings.List("audio", "extensions");
                 UpdateRecordProfileNote(
                     settings.Flag("obs", "auto_switch"),
                     settings.Flag("obs", "restore_after"));
@@ -665,7 +669,7 @@ public sealed partial class MainWindow : Window
         {
             SuggestedStartLocation = PickerLocationId.VideosLibrary,
         };
-        foreach (var extension in new[] { ".mkv", ".mp4", ".mka", ".m4a", ".mp3", ".wav", ".flac", ".opus", ".webm" })
+        foreach (var extension in _recordingExtensions)
         {
             picker.FileTypeFilter.Add(extension);
         }
