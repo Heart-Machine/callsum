@@ -21,6 +21,34 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        if (WelcomePreferences.ForCurrentUser().ShouldShow())
+        {
+            ShowWelcome();
+            return;
+        }
+
+        ShowMainWindow();
+    }
+
+    private void ShowWelcome()
+    {
+        var window = new WelcomeWindow(ShowMainWindow);
+        _window = window;
+        window.Activate();
+
+        // Закрытие первого окна без «Продолжить» — это выход, а не сворачивание
+        // приложения в невидимое состояние с занятым единственным экземпляром.
+        window.Closed += (_, _) =>
+        {
+            if (_window == window)
+            {
+                _instance?.Dispose();
+            }
+        };
+    }
+
+    private void ShowMainWindow()
+    {
         var window = new MainWindow();
         _window = window;
         window.Activate();

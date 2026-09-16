@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Callsum.App.WelcomeWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Callsum.App">
+
+    <Grid Padding="28" RowSpacing="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <StackPanel Spacing="4">
+                <TextBlock Text="callsum" FontSize="28" FontWeight="SemiBold" />
+                <TextBlock
+                    x:Name="Subtitle"
+                    Text="Проверяем, всё ли готово к первому созвону"
+                    Opacity="0.7" />
+            </StackPanel>
+
+            <ProgressRing
+                x:Name="Checking"
+                Width="24"
+                Height="24"
+                HorizontalAlignment="Right"
+                IsActive="True" />
+        </Grid>
+
+        <TextBlock
+            Grid.Row="1"
+            Text="Проверка не меняет настройки компьютера. То, что можно скачать автоматически, отмечено отдельно."
+            TextWrapping="Wrap"
+            Opacity="0.7" />
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{x:Bind Checks}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:WelcomeCheck">
+                        <Grid Padding="0,12" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <SymbolIcon
+                                Symbol="{x:Bind Icon}"
+                                Foreground="{x:Bind Tint}"
+                                VerticalAlignment="Top" />
+
+                            <StackPanel Grid.Column="1" Spacing="3">
+                                <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="{x:Bind Detail}"
+                                    TextWrapping="Wrap"
+                                    Opacity="0.72" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Grid Grid.Row="3" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <CheckBox
+                x:Name="DontShowAgain"
+                VerticalAlignment="Center"
+                Content="Не показывать этот экран при следующих запусках" />
+
+            <Button
+                x:Name="ContinueButton"
+                Grid.Column="1"
+                MinWidth="120"
+                IsEnabled="False"
+                Content="Продолжить"
+                Click="OnContinueClick" />
+        </Grid>
+    </Grid>
+</Window>
