@@ -93,7 +93,15 @@ Copy-Item $built $publish -Recurse
 Get-ChildItem $publish -Filter '*.pdb' -Recurse | Remove-Item -Force
 
 Write-Host "Кладу ядро рядом с приложением"
-Copy-Item $core (Join-Path $publish 'core') -Recurse
+# В выходе dotnet build могла остаться старая папка core от предыдущей
+# локальной сборки. Если скопировать в неё каталог целиком, получится
+# core\callsum-core\… рядом с прежними файлами, и установщик понесёт две копии
+# ядра. Папка publish временная и только что собрана выше, поэтому её core
+# безопасно заменить целиком.
+$coreDestination = Join-Path $publish 'core'
+if (Test-Path $coreDestination) { Remove-Item $coreDestination -Recurse -Force }
+New-Item -ItemType Directory -Path $coreDestination | Out-Null
+Copy-Item (Join-Path $core '*') $coreDestination -Recurse
 
 vpk pack `
     --packId callsum `
