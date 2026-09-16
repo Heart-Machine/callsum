@@ -82,10 +82,8 @@ public sealed class ObsClient : IAsyncDisposable
         catch (Exception exception)
         {
             await transport.DisposeAsync().ConfigureAwait(false);
-            var reason = _settings.EnabledInObs
-                ? $"Не удалось подключиться к OBS на {_settings.Host}:{_settings.Port}: {exception.Message}. " +
-                  $"Проверьте, что OBS запущен. {ObsSettings.SetupHint}"
-                : $"WebSocket-сервер OBS выключен. {ObsSettings.SetupHint}";
+            var reason = $"Не удалось подключиться к OBS на {_settings.Host}:{_settings.Port}: {exception.Message}. " +
+                         $"Проверьте, что OBS запущен. {ObsSettings.SetupHint}";
             throw new ObsException(reason, exception);
         }
 

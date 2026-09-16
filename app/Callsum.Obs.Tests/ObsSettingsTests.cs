@@ -6,49 +6,10 @@ public class ObsSettingsTests : IDisposable
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "callsum-tests-" + Guid.NewGuid().ToString("N"));
 
-    private string WriteConfig(string json)
-    {
-        Directory.CreateDirectory(_folder);
-        var path = Path.Combine(_folder, "config.json");
-        File.WriteAllText(path, json);
-        return path;
-    }
-
     [Fact]
-    public void Пароль_и_порт_берутся_из_настроек_OBS()
+    public void Настройки_подключения_имеют_значения_по_умолчанию()
     {
-        // Пароль лежит в конфиге самого OBS — спрашивать его у пользователя не нужно.
-        var path = WriteConfig(
-            """{"server_enabled": true, "server_port": 4466, "auth_required": true, "server_password": "тайна"}""");
-
-        var settings = ObsSettings.Load(path);
-
-        Assert.Equal(4466, settings.Port);
-        Assert.Equal("тайна", settings.Password);
-        Assert.True(settings.EnabledInObs);
-    }
-
-    [Fact]
-    public void Выключенный_сервер_виден_в_настройках()
-    {
-        var path = WriteConfig("""{"server_enabled": false, "server_port": 4455, "auth_required": false}""");
-
-        Assert.False(ObsSettings.Load(path).EnabledInObs);
-    }
-
-    [Fact]
-    public void Без_авторизации_пароль_не_подставляется()
-    {
-        var path = WriteConfig(
-            """{"server_enabled": true, "server_port": 4455, "auth_required": false, "server_password": "лишний"}""");
-
-        Assert.Equal("", ObsSettings.Load(path).Password);
-    }
-
-    [Fact]
-    public void Отсутствующий_конфиг_даёт_значения_по_умолчанию()
-    {
-        var settings = ObsSettings.Load(Path.Combine(_folder, "нет-такого.json"));
+        var settings = new ObsSettings();
 
         Assert.Equal("127.0.0.1", settings.Host);
         Assert.Equal(ObsSettings.DefaultPort, settings.Port);
@@ -56,13 +17,13 @@ public class ObsSettingsTests : IDisposable
     }
 
     [Fact]
-    public void Испорченный_конфиг_не_роняет_программу()
+    public void Настройки_подключения_принимают_явные_значения()
     {
-        var path = WriteConfig("{это не json");
+        var settings = new ObsSettings { Host = "localhost", Port = 4466, Password = "тайна" };
 
-        var settings = ObsSettings.Load(path);
-
-        Assert.Equal(ObsSettings.DefaultPort, settings.Port);
+        Assert.Equal("localhost", settings.Host);
+        Assert.Equal(4466, settings.Port);
+        Assert.Equal("тайна", settings.Password);
     }
 
     [Fact]

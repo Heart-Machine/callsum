@@ -2,24 +2,19 @@
 
 from __future__ import annotations
 
-import json
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from .credentials import CredentialsError, read_obs_password
 from .obsws import ObsWsClient, ObsWsError
 
 PROFILES_DIR = Path(os.environ.get("APPDATA", "")) / "obs-studio" / "basic" / "profiles"
 
-WEBSOCKET_CONFIG = (
-    Path(os.environ.get("APPDATA", ""))
-    / "obs-studio" / "plugin_config" / "obs-websocket" / "config.json"
-)
-
 SETUP_HINT = (
     "В OBS: «Сервис» → «Настройки сервера WebSocket» → включить "
-    "«Включить сервер WebSocket». Пароль подхватится сам."
+    "«Включить сервер WebSocket». Укажите пароль в настройках callsum."
 )
 
 PROFILE_NAME = "callsum"
@@ -51,31 +46,21 @@ class ObsSettings:
     host: str = "127.0.0.1"
     port: int = 4455
     password: str = ""
-    enabled_in_obs: bool = True
+
+
+def _connection_settings(cfg=None) -> ObsSettings:
+    """Адрес и порт из config.toml, без обращения к хранилищу секретов."""
+    section = dict(getattr(cfg, "data", {}).get("obs", {})) if cfg else {}
+    return ObsSettings(
+        host=str(section.get("host", "127.0.0.1")),
+        port=int(section.get("port", 0)) or 4455,
+    )
 
 
 def read_settings(cfg=None) -> ObsSettings:
-    """Настройки подключения: из config.toml, недостающее — из конфига OBS.
-
-    Пароль к websocket лежит в конфиге самого OBS, поэтому его не нужно
-    ни спрашивать, ни хранить в config.toml.
-    """
-    section = dict(getattr(cfg, "data", {}).get("obs", {})) if cfg else {}
-    settings = ObsSettings(
-        host=str(section.get("host", "127.0.0.1")),
-        # 0 означает «взять порт из настроек OBS»: там он и задаётся.
-        port=int(section.get("port", 0)) or 4455,
-        password=str(section.get("password", "")),
-    )
-    try:
-        raw = json.loads(WEBSOCKET_CONFIG.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return settings
-    settings.enabled_in_obs = bool(raw.get("server_enabled", False))
-    if not int(section.get("port", 0) or 0):
-        settings.port = int(raw.get("server_port", settings.port))
-    if not settings.password and raw.get("auth_required", True):
-        settings.password = str(raw.get("server_password", "") or "")
+    """Настройки подключения из callsum и пароль из Диспетчера Windows."""
+    settings = _connection_settings(cfg)
+    settings.password = read_obs_password()
     return settings
 
 
@@ -90,18 +75,25 @@ class Obs:
     """
 
     def __init__(self, settings: ObsSettings | None = None, cfg=None):
-        self.settings = settings or read_settings(cfg)
+        self._settings_error: str | None = None
+        try:
+            self.settings = settings or read_settings(cfg)
+        except CredentialsError as exc:
+            # Окно первой версии создаёт клиента до первого фонового подключения.
+            # Ошибка хранилища должна дойти до его журнала, а не уронить окно.
+            self.settings = _connection_settings(cfg)
+            self._settings_error = str(exc)
         self._client: ObsWsClient | None = None
 
     # --- подключение -------------------------------------------------
     def connect(self) -> None:
+        if self._settings_error:
+            raise ObsError(self._settings_error)
         s = self.settings
         client = ObsWsClient(host=s.host, port=s.port, password=s.password, timeout=5)
         try:
             client.connect()
         except ObsWsError as exc:
-            if not s.enabled_in_obs:
-                raise ObsError(f"WebSocket-сервер OBS выключен. {SETUP_HINT}") from exc
             raise ObsError(
                 f"Не удалось подключиться к OBS на {s.host}:{s.port}: {exc}. "
                 "Проверьте, что OBS запущен. " + SETUP_HINT

@@ -93,7 +93,7 @@ DEFAULTS: dict[str, Any] = {
         "auto_switch": True,
         "restore_after": True,
         "host": "127.0.0.1",
-        "port": 0,
+        "port": 4455,
     },
     "summary": {
         "enabled": True,

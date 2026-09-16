@@ -235,13 +235,21 @@
                                                 x:Name="ObsPort"
                                                 HorizontalAlignment="Left"
                                                 Width="200"
-                                                Minimum="0"
+                                                Minimum="1"
                                                 Maximum="65535"
                                                 SpinButtonPlacementMode="Compact" />
                                             <TextBlock
                                                 x:Name="ObsPortHint"
                                                 Style="{StaticResource Hint}"
-                                                Text="0 — спросить у самого OBS. Другое значение перекрывает его настройку." />
+                                                Text="Обычно это 4455 — значение по умолчанию OBS." />
+                                        </StackPanel>
+
+                                        <StackPanel Style="{StaticResource Field}">
+                                            <TextBlock Text="Пароль WebSocket OBS" />
+                                            <PasswordBox x:Name="ObsPassword" />
+                                            <TextBlock
+                                                Style="{StaticResource Hint}"
+                                                Text="Хранится в Диспетчере учётных данных Windows, в config.toml не записывается. Пустое поле удалит сохранённый пароль." />
                                         </StackPanel>
 
                                         <StackPanel Style="{StaticResource Field}">

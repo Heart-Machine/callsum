@@ -168,19 +168,16 @@ def cmd_doctor(args, cfg) -> int:
 
     from . import obs as obs_mod
 
-    settings = obs_mod.read_settings(cfg)
-    if not settings.enabled_in_obs:
-        print(f"[  ] WebSocket-сервер OBS выключен. {obs_mod.SETUP_HINT}")
-    else:
+    try:
+        settings = obs_mod.read_settings(cfg)
         client = obs_mod.Obs(settings)
-        try:
-            client.connect()
-            active, _ = client.status()
-            print(f"[ok] OBS на {settings.host}:{settings.port}"
-                  f"{', идёт запись' if active else ''}")
-            client.close()
-        except obs_mod.ObsError as exc:
-            print(f"[  ] {exc}")
+        client.connect()
+        active, _ = client.status()
+        print(f"[ok] OBS на {settings.host}:{settings.port}"
+              f"{', идёт запись' if active else ''}")
+        client.close()
+    except (obs_mod.ObsError, obs_mod.CredentialsError) as exc:
+        print(f"[  ] {exc}")
 
     # Папки создаются прямо здесь: проверка окружения должна оставлять его
     # готовым к работе, а не сообщать о недостаче того, что программа и так

@@ -12,14 +12,15 @@ public sealed class ObsConnection : IAsyncDisposable
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(3);
 
-    private readonly ObsSettings _settings;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly object _settingsLock = new();
 
+    private ObsSettings _settings = new();
     private ObsClient? _client;
     private ObsService? _service;
     private bool _reportedOffline;
-
-    public ObsConnection(ObsSettings settings) => _settings = settings;
+    private bool _started;
+    private int _settingsVersion;
 
     /// <summary>Подключены ли сейчас: true, false и текст для показа пользователю.</summary>
     public event Action<bool, string>? StateChanged;
@@ -31,7 +32,52 @@ public sealed class ObsConnection : IAsyncDisposable
 
     public bool Connected => _client?.Connected == true;
 
-    public void Start() => _ = Task.Run(() => KeepConnectedAsync(_lifetime.Token));
+    /// <summary>
+    /// Заменить адрес, порт и пароль. При изменении соединение поднимается заново:
+    /// иначе новое значение осталось бы в форме до следующего запуска приложения.
+    /// </summary>
+    public async Task ConfigureAsync(ObsSettings settings)
+    {
+        ObsClient? former = null;
+        var start = false;
+        var changed = false;
+        lock (_settingsLock)
+        {
+            changed = _settings.Host != settings.Host
+                      || _settings.Port != settings.Port
+                      || _settings.Password != settings.Password;
+            if (changed)
+            {
+                _settings = settings;
+                _settingsVersion++;
+                former = _client;
+                _client = null;
+                _service = null;
+                _reportedOffline = false;
+            }
+
+            if (!_started)
+            {
+                _started = true;
+                start = true;
+            }
+        }
+
+        if (former is not null)
+        {
+            await former.DisposeAsync().ConfigureAwait(false);
+        }
+
+        if (changed)
+        {
+            StateChanged?.Invoke(false, "применяю настройки подключения…");
+        }
+
+        if (start)
+        {
+            _ = Task.Run(() => KeepConnectedAsync(_lifetime.Token));
+        }
+    }
 
     private async Task KeepConnectedAsync(CancellationToken cancellationToken)
     {
@@ -68,24 +114,30 @@ public sealed class ObsConnection : IAsyncDisposable
 
     private async Task ConnectAsync(CancellationToken cancellationToken)
     {
-        var client = new ObsClient(_settings);
-        client.Disconnected += () =>
-        {
-            _client = null;
-            _service = null;
-            StateChanged?.Invoke(false, "связь потеряна, восстанавливаю…");
-            Log?.Invoke("! Связь с OBS потеряна, пробую подключиться заново");
-        };
+        var (settings, version) = CurrentSettings();
+        var client = new ObsClient(settings);
+        client.Disconnected += () => OnDisconnected(client);
 
         await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
 
         var service = new ObsService(client);
         service.OnRecordStateChanged((active, path) => RecordStateChanged?.Invoke(active, path));
 
-        _client = client;
-        _service = service;
-        _reportedOffline = false;
-        StateChanged?.Invoke(true, $"{_settings.Host}:{_settings.Port}");
+        lock (_settingsLock)
+        {
+            // Пока шло подключение, пользователь мог уже задать другой адрес
+            // или пароль. Старое соединение не должно вернуться поверх нового.
+            if (version != _settingsVersion)
+            {
+                _ = client.DisposeAsync();
+                return;
+            }
+
+            _client = client;
+            _service = service;
+            _reportedOffline = false;
+        }
+        StateChanged?.Invoke(true, $"{settings.Host}:{settings.Port}");
 
         // Запись могли начать до запуска приложения — покажем это сразу.
         var status = await service.GetRecordStatusAsync(cancellationToken).ConfigureAwait(false);
@@ -93,6 +145,31 @@ public sealed class ObsConnection : IAsyncDisposable
         {
             RecordStateChanged?.Invoke(true, null);
         }
+    }
+
+    private (ObsSettings Settings, int Version) CurrentSettings()
+    {
+        lock (_settingsLock)
+        {
+            return (_settings, _settingsVersion);
+        }
+    }
+
+    private void OnDisconnected(ObsClient client)
+    {
+        lock (_settingsLock)
+        {
+            if (!ReferenceEquals(_client, client))
+            {
+                return;
+            }
+
+            _client = null;
+            _service = null;
+        }
+
+        StateChanged?.Invoke(false, "связь потеряна, восстанавливаю…");
+        Log?.Invoke("! Связь с OBS потеряна, пробую подключиться заново");
     }
 
     /// <summary>Начать запись. Возвращает текст ошибки или null, если всё вышло.</summary>
@@ -282,9 +359,17 @@ public sealed class ObsConnection : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _lifetime.Cancel();
-        if (_client is not null)
+        ObsClient? client;
+        lock (_settingsLock)
         {
-            await _client.DisposeAsync().ConfigureAwait(false);
+            client = _client;
+            _client = null;
+            _service = null;
+        }
+
+        if (client is not null)
+        {
+            await client.DisposeAsync().ConfigureAwait(false);
         }
 
         _lifetime.Dispose();
