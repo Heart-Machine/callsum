@@ -184,6 +184,22 @@ public abstract record EngineEvent(string? Id)
     /// <summary>Модели, установленные в Ollama: окно предлагает выбрать из них.</summary>
     public sealed record Models(string? Id, IReadOnlyList<string> Names) : EngineEvent(Id);
 
+    /// <summary>Один шаблон протокола: встроенный или сохранённый пользователем.</summary>
+    public sealed record PromptTemplate(string Name, string Content, bool IsCustom, string? Error)
+    {
+        public string Title => Name switch
+        {
+            "summary_ru.md" => "Обычный созвон",
+            "map_ru.md" => "Факты из части длинного созвона",
+            "reduce_ru.md" => "Сведение частей длинного созвона",
+            _ => Name,
+        };
+    }
+
+    /// <summary>Шаблоны и папка личных копий, которую обновление не затрагивает.</summary>
+    public sealed record Prompts(string? Id, string Folder, IReadOnlyList<PromptTemplate> Items)
+        : EngineEvent(Id);
+
     /// <summary>Событие неизвестного вида: ядро новее приложения — не повод падать.</summary>
     public sealed record Unknown(string Type, JsonElement Data) : EngineEvent((string?)null);
 
@@ -226,6 +242,7 @@ public abstract record EngineEvent(string? Id)
                 "error" => new Failed(id, ReadText(root, "message")),
                 "doctor" => new Doctor(id, root.Clone()),
                 "models" => new Models(id, SettingValue.ToList(Branch(root, "models"))),
+                "prompts" => new Prompts(id, ReadText(root, "folder"), ReadPrompts(root)),
                 "settings" => new Settings(
                     id,
                     ReadText(root, "path"),
@@ -248,6 +265,22 @@ public abstract record EngineEvent(string? Id)
 
     private static bool ReadFlag(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
+
+    private static IReadOnlyList<PromptTemplate> ReadPrompts(JsonElement root)
+    {
+        if (!root.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+        return items.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.Object)
+            .Select(item => new PromptTemplate(
+                ReadText(item, "name"),
+                ReadText(item, "content"),
+                ReadFlag(item, "custom"),
+                ReadText(item, "error") is { Length: > 0 } error ? error : null))
+            .ToList();
+    }
 
     private static double? ReadNumber(JsonElement root, string name)
     {

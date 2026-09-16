@@ -37,6 +37,16 @@ public class EngineLocatorTests : IDisposable
     }
 
     [Fact]
+    public void В_разработке_свежая_сборка_в_dist_важнее_старой_копии_рядом()
+    {
+        var expected = Create("dist", "callsum-core", EngineLocator.ExecutableName);
+        var runningFrom = Path.Combine(_root, "app", "bin", "Debug", "net9.0");
+        Create("app", "bin", "Debug", "net9.0", "core", EngineLocator.ExecutableName);
+
+        Assert.Equal(expected, EngineLocator.Find(runningFrom));
+    }
+
+    [Fact]
     public void Когда_ядра_нет_возвращается_пусто_и_есть_что_сказать()
     {
         Directory.CreateDirectory(_root);

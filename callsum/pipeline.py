@@ -8,7 +8,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from . import audio, merge, naming, summarize
+from . import audio, merge, naming, prompts, summarize
 from .transcribe import Segment, Transcriber, hhmmss
 
 
@@ -138,7 +138,7 @@ def process(
                 f"# Протокол созвона: {src.stem}\n\n{meta}\n\n{text}\n", encoding="utf-8"
             )
             log(f"Протокол: {res.summary_md}")
-        except summarize.OllamaError as exc:
+        except (prompts.PromptError, summarize.OllamaError) as exc:
             log(f"! Саммари не сделано: {exc}")
             log(f"  Транскрипт на месте — повторить можно так: callsum summarize \"{res.transcript_md}\"")
     elif do_summary and cfg.summary.get("enabled", True):

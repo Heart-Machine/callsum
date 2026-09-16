@@ -302,6 +302,37 @@ def test_settings_are_read_while_processing_is_running(cfg, monkeypatch):
     engine.stop(timeout=5)
 
 
+def test_prompts_are_read_while_processing_is_running(cfg, monkeypatch):
+    """Редактор шаблонов не ждёт распознавания или запроса к Ollama."""
+    import threading
+
+    from callsum.serve import Engine
+
+    started = threading.Event()
+    release = threading.Event()
+    events: list[dict] = []
+
+    def slow_process(command):
+        started.set()
+        assert release.wait(5)
+
+    engine = Engine(cfg, events.append)
+    monkeypatch.setattr(engine, "_process", slow_process)
+    engine.start()
+    engine.submit({"cmd": "process", "id": "recording"})
+    assert started.wait(5)
+
+    engine.submit({"cmd": "prompts", "id": "prompts"})
+    report = next(event for event in events if event["event"] == "prompts")
+    assert report["id"] == "prompts"
+    assert {item["name"] for item in report["items"]} == {
+        "summary_ru.md", "map_ru.md", "reduce_ru.md",
+    }
+
+    release.set()
+    engine.stop(timeout=5)
+
+
 def test_commands_sent_before_shutdown_are_executed(cfg, monkeypatch):
     """shutdown приходит сразу за командой — она всё равно должна выполниться."""
     calls: list[dict] = []
@@ -489,6 +520,23 @@ def test_settings_must_come_in_sections(cfg, tmp_path):
     events = run(cfg, {"cmd": "settings_set", "id": "1", "values": {"out": "D:/созвоны"}})
 
     assert any(e["event"] == "error" for e in events)
+
+
+def test_user_prompt_can_be_saved_and_restored(cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(serve_module.prompts.config, "config_dir", lambda: tmp_path / "config")
+    changed = "Итог:\n{meta}\n{transcript}"
+
+    events = run(
+        cfg,
+        {"cmd": "prompt_set", "id": "1", "name": "summary_ru.md", "content": changed},
+        {"cmd": "prompt_reset", "id": "2", "name": "summary_ru.md"},
+    )
+
+    reports = [event for event in events if event["event"] == "prompts"]
+    saved = next(item for item in reports[0]["items"] if item["name"] == "summary_ru.md")
+    restored = next(item for item in reports[1]["items"] if item["name"] == "summary_ru.md")
+    assert saved["content"] == changed and saved["custom"] is True
+    assert restored["content"] != changed and restored["custom"] is False
 
 
 def test_changed_model_drops_the_loaded_one(cfg, tmp_path, monkeypatch):

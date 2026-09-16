@@ -42,11 +42,14 @@ public sealed partial class SettingsWindow : Window
 
     private ChoiceSetting? _summaryModel;
     private EngineEvent.Settings? _loaded;
+    private EngineEvent.Prompts? _prompts;
     private string _microphone = "";
     private string _systemAudio = "";
     private string _savedObsPassword = "";
     private string _tab = "";
     private bool _modelsAsked;
+    private bool _promptsAsked;
+    private bool _showingPrompt;
     private bool _aboutAsked;
 
     public SettingsWindow(EngineClient engine, ObsConnection obs, Updates updates, Func<bool> recording)
@@ -200,6 +203,11 @@ public sealed partial class SettingsWindow : Window
         if (tab == "summary" && !_modelsAsked)
         {
             _ = LoadModelsAsync();
+        }
+
+        if (tab == "summary" && !_promptsAsked)
+        {
+            _ = LoadPromptsAsync();
         }
 
         if (tab == "about" && !_aboutAsked)
@@ -595,6 +603,117 @@ public sealed partial class SettingsWindow : Window
     }
 
     private void OnRefreshModelsClick(object sender, RoutedEventArgs args) => _ = LoadModelsAsync();
+
+    // --- шаблоны протокола ----------------------------------------------
+    private async Task LoadPromptsAsync()
+    {
+        _promptsAsked = true;
+        PromptPanel.IsEnabled = false;
+        PromptHint.Text = "Загружаю шаблоны…";
+        try
+        {
+            var prompts = await _engine.GetPromptsAsync();
+            _ui.TryEnqueue(() => ShowPrompts(prompts));
+        }
+        catch (Exception exception) when (exception is EngineException or TimeoutException)
+        {
+            _ui.TryEnqueue(() => PromptHint.Text = $"Не удалось прочитать шаблоны: {exception.Message}");
+        }
+    }
+
+    private void ShowPrompts(EngineEvent.Prompts prompts)
+    {
+        var selected = (PromptChoice.SelectedItem as EngineEvent.PromptTemplate)?.Name;
+        _prompts = prompts;
+        _showingPrompt = true;
+        PromptChoice.Items.Clear();
+        foreach (var prompt in prompts.Items)
+        {
+            PromptChoice.Items.Add(prompt);
+        }
+        PromptChoice.SelectedItem = prompts.Items.FirstOrDefault(item => item.Name == selected)
+                                    ?? prompts.Items.FirstOrDefault();
+        _showingPrompt = false;
+        ShowSelectedPrompt();
+        PromptPanel.IsEnabled = true;
+    }
+
+    private void OnPromptChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (!_showingPrompt)
+        {
+            ShowSelectedPrompt();
+        }
+    }
+
+    private void ShowSelectedPrompt()
+    {
+        if (PromptChoice.SelectedItem is not EngineEvent.PromptTemplate prompt || _prompts is null)
+        {
+            return;
+        }
+        PromptText.Text = prompt.Content;
+        PromptHint.Text = prompt.Error is { Length: > 0 } error
+            ? $"В шаблоне ошибка: {error}. Исправьте текст или восстановите стандартную версию."
+            : prompt.IsCustom
+            ? $"Пользовательская версия: {_prompts.Folder}"
+            : $"Стандартная версия. После сохранения личная копия появится в {_prompts.Folder}";
+        RestorePrompt.IsEnabled = prompt.IsCustom;
+    }
+
+    private async void OnSavePromptClick(object sender, RoutedEventArgs args)
+    {
+        if (PromptChoice.SelectedItem is not EngineEvent.PromptTemplate prompt)
+        {
+            return;
+        }
+        PromptPanel.IsEnabled = false;
+        Status.Text = "Сохраняю шаблон…";
+        try
+        {
+            var prompts = await _engine.SavePromptAsync(prompt.Name, PromptText.Text);
+            _ui.TryEnqueue(() =>
+            {
+                ShowPrompts(prompts);
+                Status.Text = $"Сохранён шаблон «{prompt.Title}»";
+            });
+        }
+        catch (Exception exception) when (exception is EngineException or TimeoutException)
+        {
+            _ui.TryEnqueue(() => Status.Text = exception.Message);
+        }
+        finally
+        {
+            _ui.TryEnqueue(() => PromptPanel.IsEnabled = true);
+        }
+    }
+
+    private async void OnRestorePromptClick(object sender, RoutedEventArgs args)
+    {
+        if (PromptChoice.SelectedItem is not EngineEvent.PromptTemplate prompt)
+        {
+            return;
+        }
+        PromptPanel.IsEnabled = false;
+        Status.Text = "Восстанавливаю шаблон…";
+        try
+        {
+            var prompts = await _engine.ResetPromptAsync(prompt.Name);
+            _ui.TryEnqueue(() =>
+            {
+                ShowPrompts(prompts);
+                Status.Text = $"Восстановлен шаблон «{prompt.Title}»";
+            });
+        }
+        catch (Exception exception) when (exception is EngineException or TimeoutException)
+        {
+            _ui.TryEnqueue(() => Status.Text = exception.Message);
+        }
+        finally
+        {
+            _ui.TryEnqueue(() => PromptPanel.IsEnabled = true);
+        }
+    }
 
     // --- о программе -----------------------------------------------------
     private async Task LoadAboutAsync()

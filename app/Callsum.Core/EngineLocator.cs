@@ -13,15 +13,51 @@ public static class EngineLocator
     public static IEnumerable<string> Candidates(string? baseDirectory = null)
     {
         var start = baseDirectory ?? AppContext.BaseDirectory;
+        var development = IsBuildOutput(start);
+        if (development)
+        {
+            foreach (var candidate in ProjectCores(start))
+            {
+                yield return candidate;
+            }
+        }
+
         yield return Path.Combine(start, ExecutableName);
         yield return Path.Combine(start, "core", ExecutableName);
 
+        if (!development)
+        {
+            foreach (var candidate in ProjectCores(start))
+            {
+                yield return candidate;
+            }
+        }
+    }
+
+    private static IEnumerable<string> ProjectCores(string start)
+    {
         var folder = new DirectoryInfo(start);
         while (folder is not null)
         {
             yield return Path.Combine(folder.FullName, "dist", "callsum-core", ExecutableName);
             folder = folder.Parent;
         }
+    }
+
+    /// <summary>
+    /// У `dotnet run` рядом с dll могла остаться старая копия core из прежней
+    /// публикации. В разработке свежая сборка живёт в dist и должна быть первой.
+    /// </summary>
+    private static bool IsBuildOutput(string start)
+    {
+        for (var folder = new DirectoryInfo(start); folder is not null; folder = folder.Parent)
+        {
+            if (string.Equals(folder.Name, "bin", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>Путь к ядру или null, если его нигде нет.</summary>
