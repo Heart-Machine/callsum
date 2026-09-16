@@ -86,11 +86,16 @@ class Engine:
 
     def submit(self, command: dict) -> None:
         # Форму настроек открывают и во время долгой расшифровки. Текущую
-        # конфигурацию можно отдать сразу: запись настроек по-прежнему идёт
-        # через рабочую очередь и не меняет снимок текущей записи.
-        if command.get("cmd") == "settings":
+        # конфигурацию и шаблоны можно отдать сразу: запись настроек и
+        # сохранение шаблона по-прежнему идут через рабочую очередь. Шаблон
+        # записывается атомарно, поэтому чтение увидит либо прежнюю, либо уже
+        # новую целую версию.
+        if command.get("cmd") in {"settings", "prompts"}:
             try:
-                self._settings(command)
+                if command["cmd"] == "settings":
+                    self._settings(command)
+                else:
+                    self._prompts(command)
             except Exception as exc:  # noqa: BLE001 -- ошибка файла не роняет мотор
                 self.emit({"event": "error", "id": command.get("id"), "message": str(exc)})
             return

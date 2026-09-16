@@ -285,6 +285,37 @@ def test_settings_are_read_while_processing_is_running(cfg, monkeypatch):
     engine.stop(timeout=5)
 
 
+def test_prompts_are_read_while_processing_is_running(cfg, monkeypatch):
+    """Редактор шаблонов не ждёт распознавания или запроса к Ollama."""
+    import threading
+
+    from callsum.serve import Engine
+
+    started = threading.Event()
+    release = threading.Event()
+    events: list[dict] = []
+
+    def slow_process(command):
+        started.set()
+        assert release.wait(5)
+
+    engine = Engine(cfg, events.append)
+    monkeypatch.setattr(engine, "_process", slow_process)
+    engine.start()
+    engine.submit({"cmd": "process", "id": "recording"})
+    assert started.wait(5)
+
+    engine.submit({"cmd": "prompts", "id": "prompts"})
+    report = next(event for event in events if event["event"] == "prompts")
+    assert report["id"] == "prompts"
+    assert {item["name"] for item in report["items"]} == {
+        "summary_ru.md", "map_ru.md", "reduce_ru.md",
+    }
+
+    release.set()
+    engine.stop(timeout=5)
+
+
 def test_commands_sent_before_shutdown_are_executed(cfg, monkeypatch):
     """shutdown приходит сразу за командой — она всё равно должна выполниться."""
     calls: list[dict] = []
