@@ -207,6 +207,18 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>Открыть страницу настроек по команде из главного меню.</summary>
+    public void ShowTab(string tab)
+    {
+        var item = Tabs.MenuItems
+            .OfType<NavigationViewItem>()
+            .FirstOrDefault(candidate => string.Equals(candidate.Tag as string, tab, StringComparison.Ordinal));
+        if (item is not null)
+        {
+            Tabs.SelectedItem = item;
+        }
+    }
+
     private void Select(string tab)
     {
         foreach (var item in Tabs.MenuItems.OfType<NavigationViewItem>())
@@ -609,7 +621,10 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    private async void OnCheckUpdateClick(object sender, RoutedEventArgs args)
+    private async void OnCheckUpdateClick(object sender, RoutedEventArgs args) => await CheckForUpdatesAsync();
+
+    /// <summary>Проверить обновления после перехода к разделу «О программе».</summary>
+    public async Task CheckForUpdatesAsync()
     {
         CheckUpdate.IsEnabled = false;
         UpdateStatus.Text = "Проверяю…";

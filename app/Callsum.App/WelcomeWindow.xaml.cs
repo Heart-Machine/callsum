@@ -16,17 +16,25 @@ public sealed partial class WelcomeWindow : Window
     internal static readonly SolidColorBrush Failure = new(Colors.IndianRed);
 
     private readonly Action _continueToMain;
+    private readonly bool _saveChoice;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _closed;
 
     public ObservableCollection<WelcomeCheck> Checks { get; } = [];
 
-    public WelcomeWindow(Action continueToMain)
+    public WelcomeWindow(Action continueToMain, bool saveChoice)
     {
         _continueToMain = continueToMain;
+        _saveChoice = saveChoice;
         InitializeComponent();
         Title = "callsum — Проверка готовности";
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "callsum-icon.ico"));
+
+        if (!saveChoice)
+        {
+            DontShowAgain.Visibility = Visibility.Collapsed;
+            ContinueButton.Content = "Закрыть";
+        }
 
         _ = CheckAsync();
         Closed += (_, _) =>
@@ -208,7 +216,11 @@ public sealed partial class WelcomeWindow : Window
 
     private void OnContinueClick(object sender, RoutedEventArgs args)
     {
-        WelcomePreferences.ForCurrentUser().Save(DontShowAgain.IsChecked == true);
+        if (_saveChoice)
+        {
+            WelcomePreferences.ForCurrentUser().Save(DontShowAgain.IsChecked == true);
+        }
+
         _continueToMain();
         Close();
     }

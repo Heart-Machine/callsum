@@ -8,6 +8,8 @@ public partial class App : Application
     private readonly SingleInstance? _instance;
 
     private Window? _window;
+    private WelcomeWindow? _welcome;
+    private bool _mainShown;
 
     /// <param name="instance">
     /// Занятое место одного приложения. Через него приходят просьбы показаться
@@ -23,16 +25,17 @@ public partial class App : Application
     {
         if (WelcomePreferences.ForCurrentUser().ShouldShow())
         {
-            ShowWelcome();
+            ShowInitialWelcome();
             return;
         }
 
         ShowMainWindow();
     }
 
-    private void ShowWelcome()
+    private void ShowInitialWelcome()
     {
-        var window = new WelcomeWindow(ShowMainWindow);
+        var window = new WelcomeWindow(ShowMainWindow, saveChoice: true);
+        _welcome = window;
         _window = window;
         window.Activate();
 
@@ -40,15 +43,32 @@ public partial class App : Application
         // приложения в невидимое состояние с занятым единственным экземпляром.
         window.Closed += (_, _) =>
         {
-            if (_window == window)
+            _welcome = null;
+            if (!_mainShown)
             {
                 _instance?.Dispose();
             }
         };
     }
 
+    /// <summary>Открыть диагностику из главного окна, не меняя выбор первого запуска.</summary>
+    public void ShowWelcome()
+    {
+        if (_welcome is not null)
+        {
+            _welcome.Activate();
+            return;
+        }
+
+        var window = new WelcomeWindow(() => { }, saveChoice: false);
+        _welcome = window;
+        window.Closed += (_, _) => _welcome = null;
+        window.Activate();
+    }
+
     private void ShowMainWindow()
     {
+        _mainShown = true;
         var window = new MainWindow();
         _window = window;
         window.Activate();

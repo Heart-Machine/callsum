@@ -4,6 +4,7 @@ using Callsum.Obs;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Storage.Pickers;
 
 namespace Callsum.App;
 
@@ -520,12 +521,25 @@ public sealed partial class MainWindow : Window
     }
 
     // --- настройки -----------------------------------------------------
-    private void OnSettingsClick(object sender, RoutedEventArgs args)
+    private void OnSettingsClick(object sender, RoutedEventArgs args) => OpenSettings();
+
+    private void OnAboutClick(object sender, RoutedEventArgs args) => OpenSettings("about");
+
+    private void OnCheckUpdatesClick(object sender, RoutedEventArgs args)
+    {
+        var settings = OpenSettings("about");
+        if (settings is not null)
+        {
+            _ = settings.CheckForUpdatesAsync();
+        }
+    }
+
+    private SettingsWindow? OpenSettings(string? tab = null)
     {
         if (_engine is null)
         {
             Append($"! Настройки читает ядро обработки: {EngineLocator.NotFoundMessage}");
-            return;
+            return null;
         }
 
         // Второе окно настроек показывало бы те же значения дважды, и сохранение
@@ -533,7 +547,12 @@ public sealed partial class MainWindow : Window
         if (_settings is not null)
         {
             _settings.Activate();
-            return;
+            if (tab is not null)
+            {
+                _settings.ShowTab(tab);
+            }
+
+            return _settings;
         }
 
         // О сохранении в журнал пишет само ядро — второй раз повторять незачем,
@@ -541,7 +560,13 @@ public sealed partial class MainWindow : Window
         var window = new SettingsWindow(_engine, _obs, _updates, () => _recordingSince is not null);
         window.Closed += (_, _) => _settings = null;
         _settings = window;
+        if (tab is not null)
+        {
+            window.ShowTab(tab);
+        }
+
         window.Activate();
+        return window;
     }
 
     private async void OnReprocessClick(object sender, RoutedEventArgs args)
@@ -586,6 +611,56 @@ public sealed partial class MainWindow : Window
         if (_outFolder is { Length: > 0 } folder)
         {
             Report(Shell.OpenFolder(folder));
+        }
+    }
+
+    private void OnOpenRecordingsFolderClick(object sender, RoutedEventArgs args)
+    {
+        if (_recordingsFolder is { Length: > 0 } folder)
+        {
+            Report(Shell.OpenFolder(folder));
+        }
+    }
+
+    private async void OnProcessFileClick(object sender, RoutedEventArgs args)
+    {
+        if (_engine is null)
+        {
+            Append($"! Обработка пропущена: {EngineLocator.NotFoundMessage}");
+            return;
+        }
+
+        var picker = new FileOpenPicker
+        {
+            SuggestedStartLocation = PickerLocationId.VideosLibrary,
+        };
+        foreach (var extension in new[] { ".mkv", ".mp4", ".mka", ".m4a", ".mp3", ".wav", ".flac", ".opus", ".webm" })
+        {
+            picker.FileTypeFilter.Add(extension);
+        }
+
+        WinRT.Interop.InitializeWithWindow.Initialize(
+            picker,
+            WinRT.Interop.WindowNative.GetWindowHandle(this));
+        var file = await picker.PickSingleFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        Append($"Обрабатываю файл: {file.Name}");
+        ShowQueueing("Добавляю в очередь…");
+        if (!await ProcessAsync(file.Path))
+        {
+            HideProgress("Не удалось добавить файл");
+        }
+    }
+
+    private void OnEnvironmentCheckClick(object sender, RoutedEventArgs args)
+    {
+        if (Application.Current is App app)
+        {
+            app.ShowWelcome();
         }
     }
 
