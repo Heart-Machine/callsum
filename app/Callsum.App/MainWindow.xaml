@@ -20,15 +20,42 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Spacing="12">
-        <Grid>
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <MenuBar>
+                <MenuBarItem Title="Записи">
+                    <MenuFlyoutItem Text="Обработать файл…" Click="OnProcessFileClick" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="Открыть папку записей" Click="OnOpenRecordingsFolderClick" />
+                    <MenuFlyoutItem Text="Открыть папку результатов" Click="OnOpenOutFolderClick" />
+                </MenuBarItem>
+
+                <MenuBarItem Title="Настройки">
+                    <MenuFlyoutItem Text="Все настройки…" Click="OnSettingsClick" />
+                </MenuBarItem>
+
+                <MenuBarItem Title="Справка">
+                    <MenuFlyoutItem Text="Проверка готовности" Click="OnEnvironmentCheckClick" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Text="О программе" Click="OnAboutClick" />
+                    <MenuFlyoutItem Text="Проверить обновления" Click="OnCheckUpdatesClick" />
+                </MenuBarItem>
+            </MenuBar>
+
             <!-- Состояние связи с OBS: видно сразу, без раскрытия журнала. -->
             <TextBlock
                 x:Name="ObsStatus"
+                Grid.Column="1"
                 VerticalAlignment="Center"
                 Text="OBS: подключаюсь…"
                 Opacity="0.6" />
 
-            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+            <StackPanel Grid.Column="2" HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
                 <!-- Появляется, только когда обновление уже скачано: предлагать
                      перезапуск до этого — обманывать ожидание. -->
                 <HyperlinkButton
@@ -46,11 +73,6 @@
                     Content="Настроить OBS"
                     Click="OnSetUpObsClick" />
 
-                <HyperlinkButton
-                    x:Name="OpenSettings"
-                    Padding="4,0"
-                    Content="Настройки"
-                    Click="OnSettingsClick" />
             </StackPanel>
         </Grid>
 
@@ -118,6 +140,7 @@
                 <Grid>
                     <ListView
                         x:Name="Results"
+                        Padding="0,0,12,0"
                         SelectionMode="None"
                         IsItemClickEnabled="True"
                         ItemClick="OnResultClick">
@@ -187,6 +210,7 @@
         </Expander>
 
         <TextBlock
+            x:Name="RecordProfileNote"
             Grid.Row="6"
             Opacity="0.6"
             FontSize="12"
