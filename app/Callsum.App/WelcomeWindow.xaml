@@ -68,6 +68,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <CheckBox
@@ -76,8 +77,15 @@
                 Content="Не показывать этот экран при следующих запусках" />
 
             <Button
-                x:Name="ContinueButton"
+                x:Name="RefreshButton"
                 Grid.Column="1"
+                MinWidth="110"
+                Content="Обновить"
+                Click="OnRefreshClick" />
+
+            <Button
+                x:Name="ContinueButton"
+                Grid.Column="2"
                 MinWidth="120"
                 IsEnabled="False"
                 Content="Продолжить"

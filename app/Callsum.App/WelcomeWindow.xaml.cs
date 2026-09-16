@@ -19,6 +19,8 @@ public sealed partial class WelcomeWindow : Window
     private readonly bool _saveChoice;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _closed;
+    private bool _checking;
+    private List<WelcomeCheck>? _report;
 
     public ObservableCollection<WelcomeCheck> Checks { get; } = [];
 
@@ -46,17 +48,30 @@ public sealed partial class WelcomeWindow : Window
 
     private async Task CheckAsync()
     {
+        if (_closed || _checking)
+        {
+            return;
+        }
+
+        _checking = true;
+        var report = _report = [];
+        Checks.Clear();
         Checks.Add(WelcomeCheck.Checking());
+        Checking.Visibility = Visibility.Visible;
+        Checking.IsActive = true;
+        Subtitle.Text = "Проверяем, всё ли готово к первому созвону";
+        RefreshButton.IsEnabled = false;
+        ContinueButton.IsEnabled = false;
 
         try
         {
-            var doctor = await CheckEngineAsync();
-            if (doctor is not null)
+            var engine = await CheckEngineAsync();
+            if (engine?.Doctor is { } doctor)
             {
                 AddDoctorChecks(doctor);
             }
 
-            await CheckObsAsync();
+            await CheckObsAsync(engine?.Settings);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -68,22 +83,33 @@ public sealed partial class WelcomeWindow : Window
         }
         finally
         {
+            _report = null;
+            _checking = false;
             if (!_closed)
             {
+                // До этого момента результаты накапливались отдельно: иначе
+                // готовые части появлялись раньше медленной проверки OBS.
+                Checks.Clear();
+                foreach (var check in report)
+                {
+                    Checks.Add(check);
+                }
+
                 Checking.IsActive = false;
                 Checking.Visibility = Visibility.Collapsed;
                 Subtitle.Text = "Проверка завершена";
+                RefreshButton.IsEnabled = true;
                 ContinueButton.IsEnabled = true;
             }
         }
     }
 
-    private async Task<EngineEvent.Doctor?> CheckEngineAsync()
+    private async Task<EngineCheck?> CheckEngineAsync()
     {
         var executable = EngineLocator.Find();
         if (executable is null)
         {
-            Checks.Clear();
+            ClearReport();
             Add(WelcomeKind.Problem, "Ядро обработки не найдено", EngineLocator.NotFoundMessage);
             return null;
         }
@@ -95,9 +121,10 @@ public sealed partial class WelcomeWindow : Window
         {
             await engine.StartAsync(timeout.Token);
             var doctor = await engine.GetDoctorAsync(timeout.Token);
-            Checks.Clear();
+            var settings = await engine.GetSettingsAsync(timeout.Token);
+            ClearReport();
             Add(WelcomeKind.Ready, "Ядро обработки", $"Готово: {doctor.Version ?? "версия не указана"}.");
-            return doctor;
+            return new EngineCheck(doctor, settings);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -105,7 +132,7 @@ public sealed partial class WelcomeWindow : Window
         }
         catch (OperationCanceledException)
         {
-            Checks.Clear();
+            ClearReport();
             Add(
                 WelcomeKind.Problem,
                 "Ядро обработки долго не отвечает",
@@ -114,7 +141,7 @@ public sealed partial class WelcomeWindow : Window
         }
         catch (Exception exception) when (exception is EngineException or IOException or TimeoutException)
         {
-            Checks.Clear();
+            ClearReport();
             Add(WelcomeKind.Problem, "Ядро обработки не запускается", exception.Message);
             return null;
         }
@@ -178,12 +205,31 @@ public sealed partial class WelcomeWindow : Window
         }
     }
 
-    private async Task CheckObsAsync()
+    private async Task CheckObsAsync(EngineEvent.Settings? appSettings)
     {
-        var settings = ObsSettings.Load();
-        if (!settings.EnabledInObs)
+        if (appSettings is null)
         {
-            Add(WelcomeKind.Problem, "OBS", "WebSocket-сервер выключен. Включите его в настройках OBS.");
+            Add(
+                WelcomeKind.Problem,
+                "OBS",
+                "Настройки callsum не прочитаны, поэтому подключение к OBS не проверено.");
+            return;
+        }
+
+        ObsSettings settings;
+        try
+        {
+            var port = (int)(appSettings.Number("obs", "port") ?? ObsSettings.DefaultPort);
+            settings = new ObsSettings
+            {
+                Host = appSettings.Text("obs", "host"),
+                Port = port is 0 ? ObsSettings.DefaultPort : port,
+                Password = ObsCredentials.Read(),
+            };
+        }
+        catch (ObsCredentialsException exception)
+        {
+            Add(WelcomeKind.Problem, "OBS", exception.Message);
             return;
         }
 
@@ -198,8 +244,8 @@ public sealed partial class WelcomeWindow : Window
                 setup.Ready ? WelcomeKind.Ready : WelcomeKind.Problem,
                 "OBS",
                 setup.Ready
-                    ? "Подключён, профиль и коллекция callsum готовы к записи."
-                    : "Подключён, но профиль или коллекция callsum отсутствуют. Их можно создать из главного окна.");
+                    ? $"Подключён на {settings.Host}:{settings.Port}, профиль и коллекция callsum готовы к записи."
+                    : $"Подключён на {settings.Host}:{settings.Port}, но профиль или коллекция callsum отсутствуют. Их можно создать из главного окна.");
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -207,12 +253,21 @@ public sealed partial class WelcomeWindow : Window
         }
         catch (Exception exception) when (exception is ObsException or OperationCanceledException)
         {
-            Add(WelcomeKind.Problem, "OBS", "Не удалось подключиться к OBS. Запись из приложения пока недоступна.");
+            Add(
+                WelcomeKind.Problem,
+                "OBS",
+                $"Не удалось подключиться к OBS на {settings.Host}:{settings.Port}. Запись из приложения пока недоступна.");
         }
     }
 
     private void Add(WelcomeKind kind, string title, string detail) =>
-        Checks.Add(new WelcomeCheck(kind, title, detail));
+        Report.Add(new WelcomeCheck(kind, title, detail));
+
+    private ICollection<WelcomeCheck> Report => _report is not null ? _report : Checks;
+
+    private void ClearReport() => Report.Clear();
+
+    private void OnRefreshClick(object sender, RoutedEventArgs args) => _ = CheckAsync();
 
     private void OnContinueClick(object sender, RoutedEventArgs args)
     {
@@ -225,6 +280,9 @@ public sealed partial class WelcomeWindow : Window
         Close();
     }
 }
+
+/// <summary>Результат запуска ядра: его отчёт и настройки для проверки OBS.</summary>
+internal sealed record EngineCheck(EngineEvent.Doctor Doctor, EngineEvent.Settings Settings);
 
 public sealed class WelcomeCheck
 {
