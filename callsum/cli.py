@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import certs, config, naming, summarize, watch
+from . import certs, config, naming, prompts, summarize, watch
 from .pipeline import process
 from .transcribe import Transcriber
 
@@ -80,7 +80,7 @@ def cmd_summarize(args, cfg) -> int:
     meta = "\n".join(line for line in meta.splitlines() if line.startswith("- "))
     try:
         text = summarize.summarize(dialog, meta, cfg)
-    except summarize.OllamaError as exc:
+    except (prompts.PromptError, summarize.OllamaError) as exc:
         print(f"! {exc}")
         return 1
     dst = target.parent / "summary.md"

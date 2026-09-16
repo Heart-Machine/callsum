@@ -6,11 +6,8 @@ import json
 import re
 import urllib.error
 import urllib.request
-from pathlib import Path
 
-from .config import RESOURCES
-
-PROMPTS = RESOURCES / "prompts"
+from . import prompts
 
 
 class OllamaError(RuntimeError):
@@ -122,7 +119,7 @@ def _generate(cfg_summary: dict, prompt: str) -> str:
 
 
 def _template(name: str) -> str:
-    return (PROMPTS / name).read_text(encoding="utf-8")
+    return prompts.read(name)
 
 
 def _chunks(text: str, size: int, overlap: int) -> list[str]:

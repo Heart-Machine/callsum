@@ -98,6 +98,20 @@ public sealed class EngineClient : IAsyncDisposable
         CancellationToken cancellationToken = default)
         => AskAsync<EngineEvent.Settings>(new { cmd = "settings_set", values }, cancellationToken);
 
+    /// <summary>Прочитать встроенные и пользовательские шаблоны протокола.</summary>
+    public Task<EngineEvent.Prompts> GetPromptsAsync(CancellationToken cancellationToken = default)
+        => AskAsync<EngineEvent.Prompts>(new { cmd = "prompts" }, cancellationToken);
+
+    /// <summary>Сохранить личную версию одного шаблона.</summary>
+    public Task<EngineEvent.Prompts> SavePromptAsync(
+        string name, string content, CancellationToken cancellationToken = default)
+        => AskAsync<EngineEvent.Prompts>(new { cmd = "prompt_set", name, content }, cancellationToken);
+
+    /// <summary>Удалить личную копию одного шаблона и вернуть версию релиза.</summary>
+    public Task<EngineEvent.Prompts> ResetPromptAsync(
+        string name, CancellationToken cancellationToken = default)
+        => AskAsync<EngineEvent.Prompts>(new { cmd = "prompt_reset", name }, cancellationToken);
+
     /// <summary>
     /// Отправить команду и дождаться ответа именно на неё.
     ///

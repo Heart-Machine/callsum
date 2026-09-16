@@ -474,6 +474,23 @@ def test_settings_must_come_in_sections(cfg, tmp_path):
     assert any(e["event"] == "error" for e in events)
 
 
+def test_user_prompt_can_be_saved_and_restored(cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(serve_module.prompts.config, "config_dir", lambda: tmp_path / "config")
+    changed = "Итог:\n{meta}\n{transcript}"
+
+    events = run(
+        cfg,
+        {"cmd": "prompt_set", "id": "1", "name": "summary_ru.md", "content": changed},
+        {"cmd": "prompt_reset", "id": "2", "name": "summary_ru.md"},
+    )
+
+    reports = [event for event in events if event["event"] == "prompts"]
+    saved = next(item for item in reports[0]["items"] if item["name"] == "summary_ru.md")
+    restored = next(item for item in reports[1]["items"] if item["name"] == "summary_ru.md")
+    assert saved["content"] == changed and saved["custom"] is True
+    assert restored["content"] != changed and restored["custom"] is False
+
+
 def test_changed_model_drops_the_loaded_one(cfg, tmp_path, monkeypatch):
     """Модель уже в видеопамяти: после смены выбора её нужно перезагрузить."""
     source = tmp_path / "config.toml"

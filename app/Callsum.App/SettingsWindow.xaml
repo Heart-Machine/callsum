@@ -330,6 +330,35 @@
 
                                 <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                                     <Expander.Header>
+                                        <TextBlock Text="Шаблоны протокола" />
+                                    </Expander.Header>
+                                    <ContentControl x:Name="PromptPanel" IsEnabled="False">
+                                        <StackPanel Spacing="12" Padding="0,8,0,8">
+                                            <TextBlock
+                                                Style="{StaticResource Hint}"
+                                                Text="Шаблоны можно настроить отдельно для обычных и длинных созвонов. Личные версии не меняются при обновлении приложения." />
+                                            <ComboBox
+                                                x:Name="PromptChoice"
+                                                DisplayMemberPath="Title"
+                                                SelectionChanged="OnPromptChanged" />
+                                            <TextBox
+                                                x:Name="PromptText"
+                                                AcceptsReturn="True"
+                                                TextWrapping="Wrap"
+                                                FontFamily="Cascadia Mono"
+                                                Height="340"
+                                                ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                                            <TextBlock x:Name="PromptHint" Style="{StaticResource Hint}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Button x:Name="SavePrompt" Content="Сохранить шаблон" Click="OnSavePromptClick" />
+                                                <Button x:Name="RestorePrompt" Content="Восстановить" Click="OnRestorePromptClick" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ContentControl>
+                                </Expander>
+
+                                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                    <Expander.Header>
                                         <TextBlock Text="Дополнительно" />
                                     </Expander.Header>
                                     <StackPanel Spacing="16" Padding="0,8,0,8">

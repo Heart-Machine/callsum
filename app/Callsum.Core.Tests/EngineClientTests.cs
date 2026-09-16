@@ -244,6 +244,19 @@ public class EngineClientTests
     }
 
     [Fact]
+    public void Шаблоны_из_ядра_разбираются_с_источником()
+    {
+        var message = Assert.IsType<EngineEvent.Prompts>(EngineEvent.Parse(
+            """{"event":"prompts","id":"1","folder":"D:/prompts","items":[{"name":"summary_ru.md","content":"{transcript}","custom":true,"error":"нет {meta}"}]}"""));
+
+        Assert.Equal("D:/prompts", message.Folder);
+        Assert.Single(message.Items);
+        Assert.Equal("Обычный созвон", message.Items[0].Title);
+        Assert.True(message.Items[0].IsCustom);
+        Assert.Equal("нет {meta}", message.Items[0].Error);
+    }
+
+    [Fact]
     public async Task Завершение_ядра_замечается()
     {
         var transport = new FakeEngineTransport();

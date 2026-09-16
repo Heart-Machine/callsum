@@ -13,6 +13,9 @@
     {"cmd": "settings",  "id": "4"}
     {"cmd": "settings_set", "id": "5", "values": {"paths": {"out": "D:/созвоны"}}}
     {"cmd": "models",    "id": "6", "host": "http://127.0.0.1:11434"}
+    {"cmd": "prompts",   "id": "7"}
+    {"cmd": "prompt_set", "id": "8", "name": "summary_ru.md", "content": "…"}
+    {"cmd": "prompt_reset", "id": "9", "name": "summary_ru.md"}
     {"cmd": "shutdown"}
 
 События:
@@ -37,7 +40,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
 from . import (
-    __version__, audio, certs, config, cuda, ffmpeg, models, naming, settings, summarize,
+    __version__, audio, certs, config, cuda, ffmpeg, models, naming, prompts, settings, summarize,
 )
 from .pipeline import process
 from .transcribe import Transcriber
@@ -112,6 +115,9 @@ class Engine:
             "doctor": self._doctor,
             "settings": self._settings,
             "settings_set": self._settings_set,
+            "prompts": self._prompts,
+            "prompt_set": self._prompt_set,
+            "prompt_reset": self._prompt_reset,
             "models": self._models,
         }.get(str(name))
         self._current = command.get("id")
@@ -272,6 +278,45 @@ class Engine:
 
         self.emit({"event": "log", "id": request_id, "text": f"Настройки сохранены: {path}"})
         self.emit(self._settings_report(request_id))
+
+    # --- шаблоны протокола ----------------------------------------------
+    def _prompts(self, command: dict) -> None:
+        """Отдать поставляемые и личные шаблоны для редактора в окне."""
+        self.emit(self._prompts_report(command.get("id")))
+
+    def _prompt_set(self, command: dict) -> None:
+        request_id = command.get("id")
+        name = command.get("name")
+        content = command.get("content")
+        if not isinstance(name, str) or not isinstance(content, str):
+            self.emit({
+                "event": "error", "id": request_id,
+                "message": "Шаблон передаётся именем и текстом",
+            })
+            return
+        try:
+            prompts.save(name, content)
+        except prompts.PromptError as exc:
+            self.emit({"event": "error", "id": request_id, "message": str(exc)})
+            return
+        self.emit(self._prompts_report(request_id))
+
+    def _prompt_reset(self, command: dict) -> None:
+        request_id = command.get("id")
+        name = command.get("name")
+        if not isinstance(name, str):
+            self.emit({"event": "error", "id": request_id, "message": "Не указано имя шаблона"})
+            return
+        try:
+            prompts.reset(name)
+        except prompts.PromptError as exc:
+            self.emit({"event": "error", "id": request_id, "message": str(exc)})
+            return
+        self.emit(self._prompts_report(request_id))
+
+    @staticmethod
+    def _prompts_report(request_id: Any) -> dict:
+        return {"event": "prompts", "id": request_id, **prompts.report()}
 
     def _settings_report(self, request_id: Any) -> dict:
         """Настройки в виде данных: значения как в файле и куда они указывают."""
