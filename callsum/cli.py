@@ -75,9 +75,13 @@ def cmd_summarize(args, cfg) -> int:
         print(f"! Нет транскрипта: {target}")
         return 1
     raw = target.read_text(encoding="utf-8")
-    meta, _, dialog = raw.partition("\n---\n")
-    dialog = (dialog or raw).strip()
+    meta, _, _ = raw.partition("\n---\n")
+    dialog = summarize.dialog_from_document(raw)
     meta = "\n".join(line for line in meta.splitlines() if line.startswith("- "))
+    if not dialog:
+        (target.parent / "summary.md").unlink(missing_ok=True)
+        print(f"! {summarize.EMPTY_TRANSCRIPT_MESSAGE}")
+        return 0
     try:
         text = summarize.summarize(dialog, meta, cfg)
     except summarize.OllamaError as exc:

@@ -185,9 +185,15 @@ class Engine:
             return
 
         raw = target.read_text(encoding="utf-8")
-        meta, _, dialog = raw.partition("\n---\n")
-        dialog = (dialog or raw).strip()
+        meta, _, _ = raw.partition("\n---\n")
+        dialog = summarize.dialog_from_document(raw)
         meta = "\n".join(line for line in meta.splitlines() if line.startswith("- "))
+        if not dialog:
+            (target.parent / "summary.md").unlink(missing_ok=True)
+            self.emit({
+                "event": "done", "id": request_id, "out_dir": str(target.parent), "summary": False,
+            })
+            return
         text = summarize.summarize(
             dialog, meta, self.cfg,
             log=lambda line: self.emit({"event": "log", "id": request_id, "text": str(line)}),

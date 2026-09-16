@@ -127,7 +127,7 @@ def process(
     )
     log(f"Транскрипт: {res.transcript_md}")
 
-    if do_summary and cfg.summary.get("enabled", True):
+    if do_summary and cfg.summary.get("enabled", True) and dialog.strip():
         # Освобождаем видеопамять: языковая модель и модель распознавания
         # вместе в неё не помещаются, и протокол готовится в разы дольше.
         tr.release()
@@ -141,5 +141,10 @@ def process(
         except summarize.OllamaError as exc:
             log(f"! Саммари не сделано: {exc}")
             log(f"  Транскрипт на месте — повторить можно так: callsum summarize \"{res.transcript_md}\"")
+    elif do_summary and cfg.summary.get("enabled", True):
+        # Повторная обработка пишет в ту же папку: ложный протокол от старой
+        # версии нельзя оставлять рядом с пустой расшифровкой.
+        res.summary_md.unlink(missing_ok=True)
+        log(f"Протокол не создан: {summarize.EMPTY_TRANSCRIPT_MESSAGE}")
     stage("done", 1.0, str(res.out_dir))
     return res

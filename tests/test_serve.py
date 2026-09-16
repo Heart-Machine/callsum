@@ -94,6 +94,23 @@ def test_already_processed_recording_is_skipped(cfg, tmp_path, monkeypatch):
     assert done["summary"] is False
 
 
+def test_empty_transcript_does_not_make_a_summary(cfg, tmp_path, monkeypatch):
+    folder = cfg.path("out") / "без речи"
+    folder.mkdir(parents=True)
+    transcript = folder / "transcript.md"
+    transcript.write_text(
+        "# Расшифровка\n\n- Файл: silence.mkv\n\n---\n\n", encoding="utf-8")
+    (folder / "summary.md").write_text("выдуманный протокол", encoding="utf-8")
+    monkeypatch.setattr(
+        serve_module.summarize, "_generate", lambda *_args: pytest.fail("Ollama не нужна"))
+
+    events = run(cfg, {"cmd": "summarize", "id": "4", "transcript": str(transcript)})
+
+    done = next(e for e in events if e["event"] == "done")
+    assert done["summary"] is False
+    assert not (folder / "summary.md").exists()
+
+
 def test_processing_reports_progress_and_result(cfg, tmp_path, monkeypatch):
     source = tmp_path / "rec" / "созвон.mkv"
     source.parent.mkdir(parents=True)
